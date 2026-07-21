@@ -879,6 +879,15 @@ document.getElementById("speedRange").addEventListener("input", (e) => {
   document.getElementById("speedVal").textContent = `×${state.simSpeed}`;
 });
 
+// La frecuencia que se muestra bajo el radar cambia según qué controlador
+// tendría a estos vuelos en la realidad: "Control" para los que están en
+// ruta, "Aproximación" para los que ya están bajando o en espera. Es el
+// mismo dato que en la vida real anuncian por radio al hacer un "handoff".
+function updateFreqTag() {
+  const freq = state.filter === "app" ? "APP 118.70" : "CTR 124.35";
+  document.getElementById("freqTag").textContent = `SKW-4 ${freq}`;
+}
+
 document.getElementById("filterSeg").addEventListener("click", (e) => {
   const btn = e.target.closest("button");
   if (!btn) return;
@@ -886,6 +895,7 @@ document.getElementById("filterSeg").addEventListener("click", (e) => {
   btn.classList.add("on");
   state.filter = btn.dataset.f;
   renderFlightList(); // para que la lista cambie al instante, sin esperar el próximo tick de la simulación
+  updateFreqTag();
 });
 
 function tickClock() {
@@ -1027,6 +1037,7 @@ setupResizer({
 resize();
 tickClock();
 applyLanguage(state.lang);
+updateFreqTag();
 
 requestAnimationFrame(drawFrame);                    // bucle de dibujo (va a la velocidad de la pantalla)
 setInterval(() => simulate(performance.now()), 100); // bucle de simulación (10 veces por segundo)
