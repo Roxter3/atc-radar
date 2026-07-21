@@ -589,7 +589,7 @@ function renderFlightList() {
   const sorted = [...state.flights].sort((a, b) => b.altitude - a.altitude);
   const seenIds = new Set();
 
-  sorted.forEach((f) => {
+  sorted.forEach((f, index) => {
     seenIds.add(f.id);
     let row = flightRowEls.get(f.id);
 
@@ -610,9 +610,17 @@ function renderFlightList() {
     row.querySelector(".cs").textContent = f.callsign;
     row.querySelector(".al").textContent = `FL${pad3(Math.round(f.altitude))}`;
 
-    // lo movemos a su posición según el orden actual; si ya estaba ahí,
-    // moverlo no lo destruye ni le hace perder el estado de hover
-    wrap.appendChild(row);
+    // Solo tocamos el DOM si esta fila NO está ya en el lugar que le toca.
+    // "appendChild" (o "insertBefore") mueve el nodo aunque ya esté en su
+    // sitio: por dentro, el navegador igual lo saca y lo vuelve a meter, y
+    // eso alcanza para cortar la transición de ":hover" a la mitad (el
+    // parpadeo). Comparando contra el vecino de al lado, nos ahorramos
+    // ese movimiento innecesario en los 9 de cada 10 casos en que el
+    // orden de la lista no cambió respecto al render anterior.
+    const refNode = wrap.children[index];
+    if (refNode !== row) {
+      wrap.insertBefore(row, refNode || null);
+    }
   });
 
   // los vuelos que ya salieron del radar se quitan de la lista
