@@ -216,6 +216,16 @@ const state = {
   feed: [],            // bitácora de eventos (kind + args, no texto), más reciente primero
   sweepAngle: 0,        // ángulo actual del barrido del radar
   lang: getSavedLang(), // idioma activo de la interfaz
+  // clima del sector, estilo METAR: se muestra debajo del radar y varía
+  // lentamente con el tiempo, para que se sienta viva sin ser el foco
+  // de atención (las abreviaturas de aviación se dejan sin traducir,
+  // que es justo como funcionan de verdad en cualquier país)
+  weather: {
+    windDir: rnd(0, 360),
+    windKt: rndInt(4, 22),
+    visSm: pick([10, 10, 10, 7, 5, 3]),
+    qnh: rndInt(995, 1025),
+  },
 };
 
 // Hora actual en formato "HH:MM:SSZ", como se acostumbra en aviación (hora UTC / Zulu)
@@ -270,6 +280,12 @@ function simulate(now) {
   const dt = dtReal * state.simSpeed; // tiempo "de simulación", ya acelerado por el slider
 
   state.sweepAngle = (state.sweepAngle + dt * 60) % 360;
+
+  // el viento cambia de a poquito, como pasa de verdad, no de golpe
+  const w = state.weather;
+  w.windDir = (w.windDir + rnd(-dt * 0.3, dt * 0.3) + 360) % 360;
+  w.windKt = Math.max(2, Math.min(35, w.windKt + rnd(-dt * 0.06, dt * 0.06)));
+  renderWeather();
 
   for (const f of state.flights) {
     // velocidad en nudos -> millas náuticas por segundo, para poder
@@ -710,6 +726,16 @@ fgcv.addEventListener("click", (e) => {
   if (closest) selectFlight(closest.id);
 });
 
+// El "reporte" de clima del sector, estilo METAR. Las abreviaturas
+// (WIND, VIS, QNH) se dejan igual en los dos idiomas: así funciona de
+// verdad la fraseología aeronáutica en cualquier país.
+function renderWeather() {
+  const w = state.weather;
+  const dir = String(Math.round(w.windDir)).padStart(3, "0");
+  document.getElementById("wxTag").textContent =
+    `WIND ${dir}°/${Math.round(w.windKt)}KT · VIS ${w.visSm}SM · QNH ${w.qnh}`;
+}
+
 // ============================================================
 // INTERFAZ: KPIs, listas y bitácora
 // Estas funciones no calculan nada nuevo, solo toman lo que ya hay
@@ -1038,6 +1064,7 @@ resize();
 tickClock();
 applyLanguage(state.lang);
 updateFreqTag();
+renderWeather();
 
 requestAnimationFrame(drawFrame);                    // bucle de dibujo (va a la velocidad de la pantalla)
 setInterval(() => simulate(performance.now()), 100); // bucle de simulación (10 veces por segundo)

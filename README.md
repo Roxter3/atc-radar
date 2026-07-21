@@ -23,6 +23,7 @@ npx serve .
 - Alerta de conflicto de tráfico (STCA): si dos aviones quedan a menos de 5 millas náuticas Y menos de 1000 pies de diferencia de altitud al mismo tiempo, el sistema los marca en el radar (anillo punteado y línea entre ambos), lo anuncia en la bitácora y suma a un indicador de alertas que resplandece mientras siga activo. Es una función propia de un controlador en tierra, distinta del aviso que recibe un piloto de su propio avión.
 - Límite de sector visible en el radar: el borde de los 80NM de alcance se dibuja como un límite real, con los sectores vecinos (SKW-2, SKW-6, SKW-8, SKW-9) marcados en las diagonales, para que las transferencias que ya se ven en la bitácora tengan también un lugar concreto en el mapa.
 - Frecuencia activa: debajo del radar se muestra qué controlador tendría estos vuelos en la realidad ("CTR 124.35" en ruta, "APP 118.70" en aproximación), y cambia sola según el filtro elegido.
+- Reporte de clima estilo METAR (viento, visibilidad, presión), que varía lentamente con el tiempo para sentirse en vivo.
 
 ## Stack
 
