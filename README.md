@@ -22,6 +22,17 @@ npx serve .
 
 HTML, CSS y JavaScript puro (sin frameworks ni build). Tipografías Rajdhani y JetBrains Mono desde Google Fonts.
 
+## Estructura del proyecto
+
+```
+atc-radar/
+├── index.html      estructura de la página
+├── css/
+│   └── styles.css  todos los estilos
+└── js/
+    └── script.js   simulación de vuelos, dibujo del radar y la interfaz
+```
+
 ## Despliegue
 
 Al ser un archivo estático, se puede publicar gratis con GitHub Pages: Settings → Pages → Deploy from branch → rama `main`, carpeta raíz.
