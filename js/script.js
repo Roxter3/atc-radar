@@ -55,6 +55,7 @@ const I18N = {
       newContact: (cs, fl) => `New contact — ${cs} inbound, FL${fl}`,
       trafficConflict: (a, b) => `Traffic conflict — ${a} and ${b} inside separation minima`,
       conflictResolved: (a, b) => `Conflict resolved — ${a} and ${b} clear of each other`,
+      landed: (cs) => `${cs} landed, runway 09`,
     },
   },
   es: {
@@ -104,6 +105,7 @@ const I18N = {
       newContact: (cs, fl) => `Nuevo contacto — ${cs} entrando, FL${fl}`,
       trafficConflict: (a, b) => `Conflicto de tráfico — ${a} y ${b} por debajo de la separación mínima`,
       conflictResolved: (a, b) => `Conflicto resuelto — ${a} y ${b} ya se separaron`,
+      landed: (cs) => `${cs} aterrizó, pista 09`,
     },
   },
 };
@@ -149,6 +151,16 @@ const MAX_FLIGHTS = 13; // ni tampoco saturado de aviones
 const CONFLICT_DIST_NM = 5;
 const CONFLICT_ALT_FL = 10; // 10 = 1000 pies, en nuestras unidades de "nivel de vuelo"
 const CONFLICT_COLOR = "#ffb020";
+
+// La torre (el centro del radar) tiene una pista propia. Un vuelo en
+// descenso deja de volar con rumbo libre y empieza a "vectorearse" hacia
+// ahí de a poco (así lo hace de verdad un controlador). Si llega lo
+// bastante cerca y lo bastante bajo, se da por aterrizado.
+const RUNWAY_LEN_NM = 2;
+const RUNWAY_LABEL = "RWY 09/27";
+const DESCENT_TURN_RATE = 12; // qué tan rápido gira hacia la pista, en grados por unidad de dt
+const LANDING_RADIUS_NM = 3;
+const LANDING_ALT_FL = 30;
 
 // pequeños ayudantes para no repetir Math.random() por todos lados
 const rnd = (a, b) => Math.random() * (b - a) + a;
@@ -293,13 +305,33 @@ function simulate(now) {
     const nmPerSec = f.speed / 3600;
     f.x += Math.sin(f.heading * Math.PI / 180) * nmPerSec * dt;
     f.y -= Math.cos(f.heading * Math.PI / 180) * nmPerSec * dt;
-    // un rumbo que se bambolea un poquito, para que no vuelen en línea perfectamente recta
-    f.heading = (f.heading + rnd(-dt * 0.6, dt * 0.6) + 360) % 360;
-    if (f.status === "CLIMB") f.altitude = Math.min(410, f.altitude + dt * 0.6);
-    if (f.status === "DESCENT") f.altitude = Math.max(20, f.altitude - dt * 0.6);
+
+    if (f.status === "DESCENT") {
+      // en descenso, el vuelo deja de volar "a su aire" y se deja
+      // vectorear de a poco hacia la pista de la torre, como pasa de verdad
+      const bearingToRunway = (angleTo(f) + 180) % 360;
+      const diff = ((bearingToRunway - f.heading + 540) % 360) - 180; // entre -180 y 180
+      const turn = Math.max(-DESCENT_TURN_RATE * dt, Math.min(DESCENT_TURN_RATE * dt, diff));
+      f.heading = (f.heading + turn + 360) % 360;
+      f.altitude = Math.max(20, f.altitude - dt * 0.6);
+    } else {
+      // un rumbo que se bambolea un poquito, para que no vuelen en línea perfectamente recta
+      f.heading = (f.heading + rnd(-dt * 0.6, dt * 0.6) + 360) % 360;
+      if (f.status === "CLIMB") f.altitude = Math.min(410, f.altitude + dt * 0.6);
+    }
   }
 
   checkConflicts();
+
+  // un vuelo en descenso que llega lo bastante cerca y lo bastante bajo
+  // se da por aterrizado en la pista de la torre
+  for (const f of [...state.flights]) {
+    if (f.status === "DESCENT" && Math.hypot(f.x, f.y) < LANDING_RADIUS_NM && f.altitude < LANDING_ALT_FL) {
+      pushFeed("landed", [f.callsign], "info");
+      removeFlight(f.id);
+      state.flights.push(createFlight());
+    }
+  }
 
   // si un avión se sale del alcance del radar, lo damos de baja (como si
   // hiciera "handoff" al siguiente sector) y ponemos uno nuevo en su lugar
@@ -564,6 +596,21 @@ function drawBackground() {
   bgx.moveTo(CX - RADIUS_NM * SCALE, CY);
   bgx.lineTo(CX + RADIUS_NM * SCALE, CY);
   bgx.stroke();
+
+  // la pista de la torre, justo en el centro del radar (orientación
+  // este-oeste, "09/27"). Es hacia donde de verdad apuntan los vuelos
+  // en descenso: ver el vectoreo en simulate().
+  const rwHalfPx = (RUNWAY_LEN_NM / 2) * SCALE;
+  bgx.fillStyle = "rgba(223,245,232,0.8)";
+  bgx.fillRect(CX - rwHalfPx, CY - 2.5, rwHalfPx * 2, 5);
+  bgx.strokeStyle = "rgba(3,9,5,0.6)";
+  bgx.lineWidth = 1;
+  bgx.strokeRect(CX - rwHalfPx, CY - 2.5, rwHalfPx * 2, 5);
+  bgx.font = "8px JetBrains Mono, monospace";
+  bgx.fillStyle = "rgba(130,172,151,0.7)";
+  bgx.textAlign = "center";
+  bgx.fillText(RUNWAY_LABEL, CX, CY + 16);
+  bgx.textAlign = "left";
 
   const compass = I18N[state.lang].compass;
   bgx.fillStyle = "rgba(223,245,232,0.5)";
