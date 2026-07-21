@@ -99,6 +99,7 @@ aside::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px}
 .kpi .val.sm{font-size:19px}
 .kpi .unit{font-size:11px;color:var(--ink-2);font-weight:400}
 
+.side-panel-grow{flex:1;min-height:0;display:flex;flex-direction:column}
 .panel-h{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.24em;color:var(--ink-2);text-transform:uppercase;display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .panel-h::before{content:"";width:5px;height:5px;background:var(--accent);border-radius:1px;box-shadow:0 0 6px var(--accent)}
 .panel-h .n{margin-left:auto;color:var(--muted)}
@@ -186,9 +187,39 @@ aside::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px}
 /* en pantallas angostas (celular) apilamos todo en una sola columna y
    escondemos los paneles menos importantes para que el radar tenga espacio */
 @media (max-width:820px){
-  .app{grid-template-columns:1fr;grid-template-rows:56px 220px 1fr 168px;grid-template-areas:"head" "side" "stage" "feed"}
-  aside{flex-direction:row;overflow-x:auto;overflow-y:hidden}
-  .kpis{grid-auto-flow:column;grid-auto-columns:120px}
-  .statuses,.flights{display:none}
+  /* la primera fila ("head") pasa de una altura fija a "auto": el
+     encabezado ya no entra en una sola línea en un celular, así que
+     necesita poder crecer a lo alto cuando su contenido se acomoda en
+     varias filas (ver más abajo) */
+  .app{grid-template-columns:1fr;grid-template-rows:auto 220px 1fr 168px;grid-template-areas:"head" "side" "stage" "feed"}
+
+  /* el encabezado entero: en vez de una sola fila que se corta al llegar
+     al borde de la pantalla, dejamos que sus hijos (marca, LIVE,
+     controles, reloj) pasen a la siguiente línea cuando no caben */
+  header{flex-wrap:wrap;height:auto;padding:10px 14px;row-gap:8px}
+  .clock{margin-left:0}
+  /* los controles (filtro, idioma, velocidad) ocupan su propia línea
+     completa, y a su vez pueden acomodarse en más de una fila si hace
+     falta, en vez de apretujarse junto a la marca */
+  .controls{flex-basis:100%;flex-wrap:wrap;gap:8px 10px}
+  .seg button{padding:6px 10px;font-size:10px}
+  .speed{font-size:9px}
+  .speed input{width:64px}
+
+  /* align-items:flex-start evita que las tarjetas de indicadores se
+     estiren para llenar el alto de la barra lateral: sin esto, al poner
+     todo en fila, cada tarjeta terminaba mucho más alta de lo necesario */
+  aside{flex-direction:row;align-items:flex-start;overflow-x:auto;overflow-y:hidden}
+  .kpis{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:120px;flex:none}
+  /* en celular no hay espacio para el desglose de estados ni la lista
+     de vuelos completa; esa información sigue disponible tocando un
+     avión en el radar, que abre la misma ficha de detalle */
+  .side-panel{display:none}
   .dossier{top:auto;bottom:14px;left:14px;right:14px;width:auto;height:60%}
+}
+
+/* en celulares angostos de verdad, el reloj UTC es lo menos importante
+   de todo, así que lo escondemos para dejarle el espacio a lo demás */
+@media (max-width:400px){
+  .clock{display:none}
 }
