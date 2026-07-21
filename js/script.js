@@ -737,6 +737,93 @@ document.getElementById("langSeg").addEventListener("click", (e) => {
   applyLanguage(btn.dataset.lang);
 });
 
+// ---------- arrastrar para agrandar la barra lateral y la bitácora ----------
+// El ancho de la barra lateral y el alto de la bitácora viven en las
+// variables CSS --side-w y --feed-h (ver css/styles.css). Esta función
+// genérica engancha una "tirita" (vsizer u hsizer) para que, al
+// arrastrarla, vaya cambiando esa variable dentro de los límites
+// mínimo/máximo. El canvas del radar no necesita que le avisemos: ya
+// tiene un ResizeObserver mirando el tamaño de #stage (ver resize()
+// más arriba), así que se ajusta solo apenas el grid cambia de tamaño.
+const MIN_SIDE_W = 220, MAX_SIDE_W = 520;
+const MIN_FEED_H = 90, MAX_FEED_H = 420;
+
+function setupResizer({ handle, cssVar, min, max, getValue, storageKey }) {
+  let dragging = false;
+
+  function apply(value) {
+    const clamped = Math.min(max, Math.max(min, value));
+    document.documentElement.style.setProperty(cssVar, `${clamped}px`);
+    // Cambiar esta variable CSS mueve el radar (#stage) de tamaño, pero el
+    // ResizeObserver de más arriba no siempre se entera al instante de un
+    // cambio de tamaño "de grid" como este (sí funciona bien cuando se
+    // redimensiona la ventana entera). Para que el radar no se vea
+    // recortado mientras arrastras, le avisamos nosotros mismos.
+    resize();
+  }
+
+  function start(e) {
+    dragging = true;
+    handle.classList.add("dragging");
+    document.body.style.userSelect = "none"; // para no seleccionar texto sin querer mientras se arrastra
+    e.preventDefault();
+  }
+
+  function stop() {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove("dragging");
+    document.body.style.userSelect = "";
+    try {
+      localStorage.setItem(storageKey, document.documentElement.style.getPropertyValue(cssVar));
+    } catch (e) {
+      // si el navegador bloquea localStorage no pasa nada grave, solo no se recuerda la próxima vez
+    }
+  }
+
+  handle.addEventListener("mousedown", start);
+  window.addEventListener("mousemove", (e) => {
+    if (dragging) apply(getValue(e.clientX, e.clientY));
+  });
+  window.addEventListener("mouseup", stop);
+
+  // lo mismo pero para pantallas táctiles (tablet con touch, por ejemplo)
+  handle.addEventListener("touchstart", start, { passive: false });
+  window.addEventListener("touchmove", (e) => {
+    if (!dragging) return;
+    const t = e.touches[0];
+    apply(getValue(t.clientX, t.clientY));
+    e.preventDefault();
+  }, { passive: false });
+  window.addEventListener("touchend", stop);
+
+  // si ya se había elegido un tamaño antes, lo recordamos entre visitas
+  try {
+    const saved = localStorage.getItem(storageKey);
+    if (saved) document.documentElement.style.setProperty(cssVar, saved);
+  } catch (e) {
+    // si falla, se usa el tamaño por defecto, sin problema
+  }
+}
+
+setupResizer({
+  handle: document.getElementById("vsizer"),
+  cssVar: "--side-w",
+  min: MIN_SIDE_W,
+  max: MAX_SIDE_W,
+  getValue: (clientX) => clientX, // la barra lateral empieza en el borde izquierdo, así que su ancho es directo la posición X del cursor
+  storageKey: "atc-radar-side-w",
+});
+
+setupResizer({
+  handle: document.getElementById("hsizer"),
+  cssVar: "--feed-h",
+  min: MIN_FEED_H,
+  max: MAX_FEED_H,
+  getValue: (clientX, clientY) => window.innerHeight - clientY, // la bitácora está pegada abajo, así que su alto es la distancia del cursor al borde inferior
+  storageKey: "atc-radar-feed-h",
+});
+
 // ============================================================
 // ARRANQUE
 // Todo lo de arriba solo define funciones y datos; aquí es donde de

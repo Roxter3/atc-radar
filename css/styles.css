@@ -22,6 +22,13 @@
   --crit:#ff4d5e;
   --font-hud:"Rajdhani",system-ui,sans-serif;
   --font-mono:"JetBrains Mono",ui-monospace,monospace;
+
+  /* ancho de la barra lateral y alto de la bitácora: son variables (no
+     números sueltos en el grid) porque el usuario las puede arrastrar
+     para agrandarlas, y el JavaScript cambia estas variables en vez de
+     tener que tocar el grid entero */
+  --side-w:300px;
+  --feed-h:168px;
 }
 
 *{box-sizing:border-box}
@@ -37,22 +44,37 @@ body{
   -webkit-font-smoothing:antialiased;
 }
 
-/* El layout entero es un grid con 3 filas y 2 columnas: el header arriba
-   ocupando todo el ancho, y abajo la barra lateral a la izquierda con
-   el radar y la bitácora a la derecha. grid-template-areas nos deja
-   dibujarlo como un mapita, es más fácil de leer que contar columnas. */
+/* El layout entero es un grid con 4 filas y 3 columnas: el header arriba
+   ocupando todo el ancho; abajo la barra lateral a la izquierda, una
+   tirita angosta para arrastrar ("vsizer"), el radar a la derecha, otra
+   tirita para arrastrar ("hsizer") y la bitácora. grid-template-areas
+   nos deja dibujarlo como un mapita, es más fácil de leer que contar
+   columnas y filas. */
 .app{
   display:grid;
-  grid-template-columns:300px 1fr;
-  grid-template-rows:56px 1fr 168px;
+  grid-template-columns:var(--side-w) 6px 1fr;
+  grid-template-rows:56px 1fr 6px var(--feed-h);
   grid-template-areas:
-    "head head"
-    "side stage"
-    "side feed";
+    "head   head   head"
+    "side   vsizer stage"
+    "side   vsizer hsizer"
+    "side   vsizer feed";
   height:100vh;
   gap:1px;
   background:var(--line); /* ese gap de 1px con este fondo hace de "línea" entre paneles */
 }
+
+/* las dos tiritas para agrandar/achicar la barra lateral y la bitácora
+   arrastrando con el mouse. Son casi invisibles hasta que el cursor
+   pasa por encima, para no ensuciar el diseño. */
+.vsizer,.hsizer{background:var(--panel);position:relative;touch-action:none}
+.vsizer{grid-area:vsizer;cursor:col-resize}
+.hsizer{grid-area:hsizer;cursor:row-resize}
+.vsizer::after,.hsizer::after{content:"";position:absolute;background:var(--line-2);transition:background .15s}
+.vsizer::after{inset:0 2px}
+.hsizer::after{inset:2px 0}
+.vsizer:hover::after,.vsizer.dragging::after,
+.hsizer:hover::after,.hsizer.dragging::after{background:var(--accent)}
 
 /* ---------- header ---------- */
 header{
@@ -216,6 +238,9 @@ aside::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px}
      avión en el radar, que abre la misma ficha de detalle */
   .side-panel{display:none}
   .dossier{top:auto;bottom:14px;left:14px;right:14px;width:auto;height:60%}
+  /* en celular el diseño ya es apilado (una sola columna), así que las
+     tiritas de arrastre no tienen sentido: se esconden */
+  .vsizer,.hsizer{display:none}
 }
 
 /* en celulares angostos de verdad, el reloj UTC es lo menos importante

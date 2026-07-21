@@ -19,6 +19,7 @@ npx serve .
 - Filtro por estado (todos / en ruta / aproximación) y control de velocidad de la simulación.
 - Interfaz bilingüe (inglés / español) con un botón para cambiar de idioma; recuerda tu elección la próxima vez que abras la página.
 - Responsive: en tablet y celular el encabezado se acomoda en varias líneas, los indicadores se vuelven una fila con scroll horizontal, y se puede seguir seleccionando un vuelo tocando directamente sobre el radar.
+- En pantallas grandes, la barra lateral y la bitácora de tráfico se pueden agrandar o achicar arrastrando el borde entre paneles; el tamaño elegido se recuerda entre visitas.
 
 ## Stack
 
