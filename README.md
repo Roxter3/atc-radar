@@ -21,6 +21,7 @@ npx serve .
 - Responsive: en tablet y celular el encabezado se acomoda en varias líneas, los indicadores se vuelven una fila con scroll horizontal, y se puede seguir seleccionando un vuelo tocando directamente sobre el radar.
 - En pantallas grandes, la barra lateral y la bitácora de tráfico se pueden agrandar o achicar arrastrando el borde entre paneles; el tamaño elegido se recuerda entre visitas.
 - Alerta de conflicto de tráfico (STCA): si dos aviones quedan a menos de 5 millas náuticas Y menos de 1000 pies de diferencia de altitud al mismo tiempo, el sistema los marca en el radar (anillo punteado y línea entre ambos), lo anuncia en la bitácora y suma a un indicador de alertas que resplandece mientras siga activo. Es una función propia de un controlador en tierra, distinta del aviso que recibe un piloto de su propio avión.
+- Límite de sector visible en el radar: el borde de los 80NM de alcance se dibuja como un límite real, con los sectores vecinos (SKW-2, SKW-6, SKW-8, SKW-9) marcados en las diagonales, para que las transferencias que ya se ven en la bitácora tengan también un lugar concreto en el mapa.
 
 ## Stack
 

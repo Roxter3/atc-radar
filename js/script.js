@@ -481,9 +481,23 @@ function resize() {
 // tamaño (ventana redimensionada, cambio de layout en celular, etc.)
 new ResizeObserver(resize).observe(stage);
 
-// Dibuja los anillos de distancia, la cruz central y las letras de
-// los puntos cardinales. Es "estático": no se anima, pero sí depende
-// del idioma (en español el oeste se escribe "O", no "W").
+// Nuestro sector se llama SKW-4 (ver el rótulo bajo el radar). Estos son
+// los sectores vecinos, uno por cada diagonal, para que el límite del
+// radar se sienta como el borde de un sector real y no solo "donde se
+// acaba el dibujo". Van en las diagonales para no chocar con las
+// letras de los puntos cardinales (N/S/E/O), que van derecho arriba,
+// abajo, y a los costados.
+const NEIGHBOR_SECTORS = [
+  { angleDeg: 45,  name: "SKW-2" },
+  { angleDeg: 135, name: "SKW-6" },
+  { angleDeg: 225, name: "SKW-8" },
+  { angleDeg: 315, name: "SKW-9" },
+];
+
+// Dibuja los anillos de distancia, la cruz central, las letras de los
+// puntos cardinales y el límite del sector con sus vecinos. Es
+// "estático": no se anima, pero sí depende del idioma (en español el
+// oeste se escribe "O", no "W").
 function drawBackground() {
   bgx.clearRect(0, 0, W, H);
   bgx.strokeStyle = "rgba(52,255,156,0.16)";
@@ -491,7 +505,8 @@ function drawBackground() {
   bgx.font = "9px JetBrains Mono, monospace";
   bgx.lineWidth = 1;
 
-  for (let i = 1; i <= 4; i++) {
+  // los primeros 3 anillos son solo referencias de distancia
+  for (let i = 1; i <= 3; i++) {
     const r = (RADIUS_NM / 4) * i * SCALE;
     bgx.beginPath();
     bgx.arc(CX, CY, r, 0, Math.PI * 2);
@@ -499,6 +514,34 @@ function drawBackground() {
     bgx.fillText(`${Math.round((RADIUS_NM / 4) * i)}NM`, CX + 4, CY - r + 10);
   }
 
+  // el anillo más externo SÍ es el límite del sector: se dibuja distinto
+  // (punteado y más marcado) para que se note que ahí termina nuestra
+  // cobertura y empieza la de otro controlador
+  const boundaryR = RADIUS_NM * SCALE;
+  bgx.beginPath();
+  bgx.setLineDash([6, 5]);
+  bgx.strokeStyle = "rgba(52,255,156,0.4)";
+  bgx.lineWidth = 1.3;
+  bgx.arc(CX, CY, boundaryR, 0, Math.PI * 2);
+  bgx.stroke();
+  bgx.setLineDash([]);
+  bgx.fillStyle = "rgba(130,172,151,0.55)";
+  bgx.font = "9px JetBrains Mono, monospace";
+  bgx.fillText(`${RADIUS_NM}NM`, CX + 4, CY - boundaryR + 10);
+
+  // nombre de cada sector vecino, justo afuera del límite
+  bgx.font = "8px JetBrains Mono, monospace";
+  bgx.fillStyle = "rgba(52,255,156,0.45)";
+  bgx.textAlign = "center";
+  for (const nb of NEIGHBOR_SECTORS) {
+    const rad = nb.angleDeg * Math.PI / 180;
+    const lx = CX + Math.sin(rad) * (boundaryR + 14);
+    const ly = CY - Math.cos(rad) * (boundaryR + 14);
+    bgx.fillText(nb.name, lx, ly);
+  }
+  bgx.textAlign = "left";
+
+  bgx.strokeStyle = "rgba(52,255,156,0.16)";
   bgx.beginPath();
   bgx.moveTo(CX, CY - RADIUS_NM * SCALE);
   bgx.lineTo(CX, CY + RADIUS_NM * SCALE);
