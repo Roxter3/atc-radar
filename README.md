@@ -16,7 +16,7 @@ npx serve .
 - Panel lateral con indicadores (vuelos activos, altitud promedio, en descenso, alertas) y el desglose de estados (ascenso, crucero, descenso, espera).
 - Lista de vuelos activos: al hacer clic (o al hacer clic sobre un contacto en el radar) se abre un panel de detalle con ruta, altitud, velocidad, rumbo y transpondedor (squawk).
 - Bitácora de eventos en vivo (despegues, cambios de altitud, alertas de emergencia simuladas).
-- Filtro por estado (todos / en ruta / aproximación) y control de velocidad de la simulación.
+- Filtro por estado (todos / en ruta / aproximación) y control de velocidad de la simulación. Con "Aproximación" activo, la lista de vuelos se convierte en la secuencia real de aterrizaje: ordenada por quién está más cerca de la torre, numerada, tal como la maneja un controlador (no algo que un piloto vea de los demás aviones).
 - Interfaz bilingüe (inglés / español) con un botón para cambiar de idioma; recuerda tu elección la próxima vez que abras la página.
 - Responsive: en tablet y celular el encabezado se acomoda en varias líneas, los indicadores se vuelven una fila con scroll horizontal, y se puede seguir seleccionando un vuelo tocando directamente sobre el radar.
 - En pantallas grandes, la barra lateral y la bitácora de tráfico se pueden agrandar o achicar arrastrando el borde entre paneles; el tamaño elegido se recuerda entre visitas.

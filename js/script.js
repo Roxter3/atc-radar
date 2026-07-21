@@ -20,6 +20,7 @@ const I18N = {
     kpiAlerts: "Alerts",
     airspaceStatus: "Airspace Status",
     activeFlights: "Active Flights",
+    activeFlightsApp: "Approach Sequence",
     rangeTag: "RANGE 80NM",
     sweepTag: "SWEEP 6s · SECTOR SKW-4",
     hint: "click a contact for details",
@@ -70,6 +71,7 @@ const I18N = {
     kpiAlerts: "Alertas",
     airspaceStatus: "Estado del Espacio Aéreo",
     activeFlights: "Vuelos Activos",
+    activeFlightsApp: "Secuencia de Aproximación",
     rangeTag: "ALCANCE 80NM",
     sweepTag: "BARRIDO 6s · SECTOR SKW-4",
     hint: "haz clic en un contacto para ver el detalle",
@@ -716,7 +718,19 @@ const flightRowEls = new Map();
 
 function renderFlightList() {
   const wrap = document.getElementById("flightList");
-  const sorted = [...state.flights].sort((a, b) => b.altitude - a.altitude);
+
+  // En el filtro "APPROACH" la lista deja de ser "todos los vuelos por
+  // altitud" y pasa a ser la secuencia de aproximación de verdad: los
+  // vuelos que están en descenso o en espera, ordenados por cuál está
+  // más cerca de la torre (el más cercano es el próximo en aterrizar).
+  // Es exactamente la tarea que hace un controlador y que un piloto no
+  // ve de los demás aviones.
+  const sequenceMode = state.filter === "app";
+  const visibles = state.flights.filter(isVisible);
+  const distTower = (f) => Math.hypot(f.x, f.y);
+  const sorted = sequenceMode
+    ? [...visibles].sort((a, b) => distTower(a) - distTower(b))
+    : [...visibles].sort((a, b) => b.altitude - a.altitude);
   const seenIds = new Set();
 
   sorted.forEach((f, index) => {
@@ -737,8 +751,10 @@ function renderFlightList() {
     const dot = row.querySelector(".cd");
     dot.style.color = STATUS[f.status].color;
     dot.style.background = STATUS[f.status].color;
-    row.querySelector(".cs").textContent = f.callsign;
-    row.querySelector(".al").textContent = `FL${pad3(Math.round(f.altitude))}`;
+    row.querySelector(".cs").textContent = sequenceMode ? `${index + 1}. ${f.callsign}` : f.callsign;
+    row.querySelector(".al").textContent = sequenceMode
+      ? `${Math.round(distTower(f))} NM`
+      : `FL${pad3(Math.round(f.altitude))}`;
 
     // Solo tocamos el DOM si esta fila NO está ya en el lugar que le toca.
     // "appendChild" (o "insertBefore") mueve el nodo aunque ya esté en su
@@ -753,7 +769,8 @@ function renderFlightList() {
     }
   });
 
-  // los vuelos que ya salieron del radar se quitan de la lista
+  // los vuelos que ya no corresponde mostrar (salieron del radar, o no
+  // pasan el filtro actual) se quitan de la lista
   for (const [id, row] of flightRowEls) {
     if (!seenIds.has(id)) {
       row.remove();
@@ -761,7 +778,9 @@ function renderFlightList() {
     }
   }
 
-  document.getElementById("flightN").textContent = state.flights.length;
+  document.getElementById("flightN").textContent = sorted.length;
+  document.getElementById("flightsPanelTitle").textContent =
+    I18N[state.lang][sequenceMode ? "activeFlightsApp" : "activeFlights"];
 }
 
 function renderFeed() {
@@ -823,6 +842,7 @@ document.getElementById("filterSeg").addEventListener("click", (e) => {
   document.querySelectorAll("#filterSeg button").forEach((b) => b.classList.remove("on"));
   btn.classList.add("on");
   state.filter = btn.dataset.f;
+  renderFlightList(); // para que la lista cambie al instante, sin esperar el próximo tick de la simulación
 });
 
 function tickClock() {
