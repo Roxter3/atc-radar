@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -13,23 +13,28 @@
 <body>
 <div class="app">
 
-  <!-- encabezado: marca, indicador "LIVE", filtros, control de velocidad y reloj UTC -->
+  <!-- encabezado: marca, indicador "LIVE", filtros, botón de idioma, velocidad y reloj UTC -->
   <header>
     <div class="brand">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M22 16v-2l-8.5-5V3.5a1.5 1.5 0 0 0-3 0V9L2 14v2l8.5-2.5V19L8 20.5V22l4-1 4 1v-1.5L13.5 19v-5.5z"/></svg>
       <div>
         <h1>ATC <span>RADAR</span></h1>
-        <div class="sub">SKYWATCH SECTOR CTRL</div>
+        <div class="sub" data-i18n="brandSub">SKYWATCH SECTOR CTRL</div>
       </div>
     </div>
-    <div class="live"><span class="pulse"></span>LIVE</div>
+    <div class="live"><span class="pulse"></span><span data-i18n="live">LIVE</span></div>
     <div class="controls">
       <div class="seg" id="filterSeg">
-        <button class="on" data-f="all">ALL</button>
-        <button data-f="route">EN ROUTE</button>
-        <button data-f="app">APPROACH</button>
+        <button class="on" data-f="all" data-i18n="filterAll">ALL</button>
+        <button data-f="route" data-i18n="filterRoute">EN ROUTE</button>
+        <button data-f="app" data-i18n="filterApp">APPROACH</button>
       </div>
-      <div class="speed">SPEED
+      <!-- botón para cambiar el idioma de toda la interfaz -->
+      <div class="seg" id="langSeg">
+        <button class="on" data-lang="en">EN</button>
+        <button data-lang="es">ES</button>
+      </div>
+      <div class="speed"><span data-i18n="speed">SPEED</span>
         <input type="range" id="speedRange" min="2" max="40" value="12">
         <b id="speedVal" style="color:var(--ink)">×12</b>
       </div>
@@ -41,30 +46,30 @@
   <aside>
     <div class="kpis">
       <div class="kpi">
-        <div class="lbl">Active Flights</div>
+        <div class="lbl" data-i18n="kpiActive">Active Flights</div>
         <div class="val" id="kpiActive">0</div>
       </div>
       <div class="kpi cc">
-        <div class="lbl">Avg Altitude</div>
+        <div class="lbl" data-i18n="kpiAlt">Avg Altitude</div>
         <div class="val sm" id="kpiAlt">FL000</div>
       </div>
       <div class="kpi wc">
-        <div class="lbl">In Descent</div>
+        <div class="lbl" data-i18n="kpiDescent">In Descent</div>
         <div class="val" id="kpiDescent">0</div>
       </div>
       <div class="kpi rc">
-        <div class="lbl">Alerts</div>
+        <div class="lbl" data-i18n="kpiAlerts">Alerts</div>
         <div class="val" id="kpiAlerts">0</div>
       </div>
     </div>
 
     <div>
-      <div class="panel-h">Airspace Status<span class="n" id="statusN"></span></div>
+      <div class="panel-h"><span data-i18n="airspaceStatus">Airspace Status</span><span class="n" id="statusN"></span></div>
       <div class="statuses" id="statusBars"></div>
     </div>
 
     <div style="flex:1;min-height:0;display:flex;flex-direction:column">
-      <div class="panel-h">Active Flights<span class="n" id="flightN"></span></div>
+      <div class="panel-h"><span data-i18n="activeFlights">Active Flights</span><span class="n" id="flightN"></span></div>
       <div class="flights" id="flightList" style="overflow-y:auto"></div>
     </div>
   </aside>
@@ -74,13 +79,13 @@
     <canvas id="bgcv"></canvas>
     <canvas id="fgcv"></canvas>
     <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
-    <div class="stage-tag"><b>RANGE 80NM</b><span>SWEEP 6s · SECTOR SKW-4</span></div>
-    <div class="hint">click a contact for details</div>
+    <div class="stage-tag"><b data-i18n="rangeTag">RANGE 80NM</b><span data-i18n="sweepTag">SWEEP 6s · SECTOR SKW-4</span></div>
+    <div class="hint" data-i18n="hint">click a contact for details</div>
   </div>
 
   <!-- bitácora de eventos, siempre agregando líneas nuevas arriba -->
   <div class="feed">
-    <div class="fh">Traffic Log<span class="n" id="feedN"></span></div>
+    <div class="fh"><span data-i18n="trafficLog">Traffic Log</span><span class="n" id="feedN"></span></div>
     <div class="flist" id="feedList"></div>
   </div>
 
@@ -95,21 +100,21 @@
       <button class="dsr-close" id="dsrClose">✕</button>
     </div>
     <div class="dsr-stats">
-      <div class="dsr-stat"><div class="l">Squawk</div><div class="v" id="dsrSquawk">—</div></div>
-      <div class="dsr-stat"><div class="l">Status</div><div class="v" id="dsrStatus">—</div></div>
-      <div class="dsr-stat"><div class="l">Type</div><div class="v" id="dsrType">—</div></div>
+      <div class="dsr-stat"><div class="l" data-i18n="squawk">Squawk</div><div class="v" id="dsrSquawk">—</div></div>
+      <div class="dsr-stat"><div class="l" data-i18n="status">Status</div><div class="v" id="dsrStatus">—</div></div>
+      <div class="dsr-stat"><div class="l" data-i18n="type">Type</div><div class="v" id="dsrType">—</div></div>
     </div>
-    <div class="dsr-sec-h">Flight Data</div>
+    <div class="dsr-sec-h" data-i18n="flightData">Flight Data</div>
     <div class="dsr-rows">
-      <div class="dsr-row"><span class="k">Route</span><span class="v" id="dsrRoute">—</span></div>
-      <div class="dsr-row"><span class="k">Altitude</span><span class="v" id="dsrAlt">—</span></div>
-      <div class="dsr-row"><span class="k">Speed</span><span class="v" id="dsrSpeed">—</span></div>
-      <div class="dsr-row"><span class="k">Heading</span><span class="v" id="dsrHeading">—</span></div>
-      <div class="dsr-row"><span class="k">Range</span><span class="v" id="dsrRange">—</span></div>
+      <div class="dsr-row"><span class="k" data-i18n="route">Route</span><span class="v" id="dsrRoute">—</span></div>
+      <div class="dsr-row"><span class="k" data-i18n="altitude">Altitude</span><span class="v" id="dsrAlt">—</span></div>
+      <div class="dsr-row"><span class="k" data-i18n="speedLbl">Speed</span><span class="v" id="dsrSpeed">—</span></div>
+      <div class="dsr-row"><span class="k" data-i18n="heading">Heading</span><span class="v" id="dsrHeading">—</span></div>
+      <div class="dsr-row"><span class="k" data-i18n="range">Range</span><span class="v" id="dsrRange">—</span></div>
     </div>
-    <div class="dsr-sec-h">Recent Events</div>
+    <div class="dsr-sec-h" data-i18n="recentEvents">Recent Events</div>
     <div class="dsr-list" id="dsrLog"></div>
-    <div class="dsr-foot">SIMULATED DATA · DEMO ONLY</div>
+    <div class="dsr-foot" data-i18n="dossierFoot">SIMULATED DATA · DEMO ONLY</div>
   </div>
 
 </div>

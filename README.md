@@ -17,6 +17,7 @@ npx serve .
 - Lista de vuelos activos: al hacer clic (o al hacer clic sobre un contacto en el radar) se abre un panel de detalle con ruta, altitud, velocidad, rumbo y transpondedor (squawk).
 - Bitácora de eventos en vivo (despegues, cambios de altitud, alertas de emergencia simuladas).
 - Filtro por estado (todos / en ruta / aproximación) y control de velocidad de la simulación.
+- Interfaz bilingüe (inglés / español) con un botón para cambiar de idioma; recuerda tu elección la próxima vez que abras la página.
 
 ## Stack
 

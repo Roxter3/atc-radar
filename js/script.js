@@ -1,4 +1,117 @@
 // ============================================================
+// TEXTOS (ES / EN)
+// Todo lo que se ve en pantalla vive aquí, en dos idiomas. Los textos
+// fijos (etiquetas, títulos de panel) son simples strings. Los mensajes
+// de la bitácora son funciones porque necesitan "rellenarse" con datos
+// del vuelo (el indicativo, la altitud, etc.) cada vez que se usan.
+// ============================================================
+const I18N = {
+  en: {
+    title: "ATC Radar — Live Airspace Monitor",
+    brandSub: "SKYWATCH SECTOR CTRL",
+    live: "LIVE",
+    filterAll: "ALL",
+    filterRoute: "EN ROUTE",
+    filterApp: "APPROACH",
+    speed: "SPEED",
+    kpiActive: "Active Flights",
+    kpiAlt: "Avg Altitude",
+    kpiDescent: "In Descent",
+    kpiAlerts: "Alerts",
+    airspaceStatus: "Airspace Status",
+    activeFlights: "Active Flights",
+    rangeTag: "RANGE 80NM",
+    sweepTag: "SWEEP 6s · SECTOR SKW-4",
+    hint: "click a contact for details",
+    trafficLog: "Traffic Log",
+    squawk: "Squawk",
+    status: "Status",
+    type: "Type",
+    flightData: "Flight Data",
+    route: "Route",
+    altitude: "Altitude",
+    speedLbl: "Speed",
+    heading: "Heading",
+    range: "Range",
+    recentEvents: "Recent Events",
+    dossierFoot: "SIMULATED DATA · DEMO ONLY",
+    total: "total",
+    compass: { N: "N", S: "S", E: "E", W: "W" },
+    statusLabels: { CLIMB: "CLIMB", CRUISE: "CRUISE", DESCENT: "DESCENT", HOLD: "HOLD" },
+    sevLabels: { info: "INFO", warn: "WARN", emerg: "EMERG" },
+    // cada función arma una línea de bitácora en inglés a partir de los
+    // datos del vuelo que le pasemos (indicativo, nivel de vuelo, etc.)
+    feed: {
+      contactAcquired: () => "Contact acquired, sector entry",
+      emergency: (cs) => `${cs} squawking 7700 — EMERGENCY DESCENT`,
+      hold: (cs) => `${cs} requesting holding pattern`,
+      climb: (cs, fl) => `${cs} cleared to climb, FL${fl}`,
+      cruise: (cs, fl) => `${cs} level at FL${fl}`,
+      descentTo: (cs, dest) => `${cs} commencing descent to ${dest}`,
+      handoffApproach: (cs) => `Handoff — ${cs} to Approach Control`,
+      handoffSector: (cs) => `Handoff — ${cs} leaving sector coverage`,
+      newContact: (cs, fl) => `New contact — ${cs} inbound, FL${fl}`,
+    },
+  },
+  es: {
+    title: "ATC Radar — Monitor de Espacio Aéreo en Vivo",
+    brandSub: "SKYWATCH · CONTROL DE SECTOR",
+    live: "EN VIVO",
+    filterAll: "TODOS",
+    filterRoute: "EN RUTA",
+    filterApp: "APROXIMACIÓN",
+    speed: "VELOCIDAD",
+    kpiActive: "Vuelos Activos",
+    kpiAlt: "Altitud Promedio",
+    kpiDescent: "En Descenso",
+    kpiAlerts: "Alertas",
+    airspaceStatus: "Estado del Espacio Aéreo",
+    activeFlights: "Vuelos Activos",
+    rangeTag: "ALCANCE 80NM",
+    sweepTag: "BARRIDO 6s · SECTOR SKW-4",
+    hint: "haz clic en un contacto para ver el detalle",
+    trafficLog: "Bitácora de Tráfico",
+    squawk: "Transpondedor",
+    status: "Estado",
+    type: "Tipo",
+    flightData: "Datos del Vuelo",
+    route: "Ruta",
+    altitude: "Altitud",
+    speedLbl: "Velocidad",
+    heading: "Rumbo",
+    range: "Distancia",
+    recentEvents: "Eventos Recientes",
+    dossierFoot: "DATOS SIMULADOS · SOLO DEMO",
+    total: "total",
+    compass: { N: "N", S: "S", E: "E", W: "O" }, // en español el oeste es "O", no "W"
+    statusLabels: { CLIMB: "ASCENSO", CRUISE: "CRUCERO", DESCENT: "DESCENSO", HOLD: "ESPERA" },
+    sevLabels: { info: "INFO", warn: "ALERTA", emerg: "EMERG" },
+    feed: {
+      contactAcquired: () => "Contacto adquirido, ingreso al sector",
+      emergency: (cs) => `${cs} transpondiendo 7700 — DESCENSO DE EMERGENCIA`,
+      hold: (cs) => `${cs} solicita patrón de espera`,
+      climb: (cs, fl) => `${cs} autorizado a ascender, FL${fl}`,
+      cruise: (cs, fl) => `${cs} nivelado en FL${fl}`,
+      descentTo: (cs, dest) => `${cs} inicia descenso hacia ${dest}`,
+      handoffApproach: (cs) => `Transferencia — ${cs} a Control de Aproximación`,
+      handoffSector: (cs) => `Transferencia — ${cs} sale de cobertura del sector`,
+      newContact: (cs, fl) => `Nuevo contacto — ${cs} entrando, FL${fl}`,
+    },
+  },
+};
+
+// si ya habías elegido un idioma antes, lo recordamos entre visitas
+function getSavedLang() {
+  try {
+    const saved = localStorage.getItem("atc-radar-lang");
+    if (saved === "es" || saved === "en") return saved;
+  } catch (e) {
+    // localStorage puede fallar en navegación privada; en ese caso no pasa nada, usamos el default
+  }
+  return "en";
+}
+
+// ============================================================
 // DATOS BASE
 // Estos son los "ingredientes" con los que armamos vuelos falsos:
 // aerolíneas, modelos de avión y aeropuertos. Todo lo demás del
@@ -8,15 +121,13 @@ const AIRLINES = ["DAL", "UAL", "AAL", "SWA", "JBU", "BAW", "AFR", "DLH", "UAE",
 const AIRCRAFT = ["A320", "A321", "A20N", "B738", "B739", "B77W", "B788", "A359", "E195", "CRJ9"];
 const AIRPORTS = ["JFK", "LAX", "ORD", "ATL", "DFW", "LHR", "CDG", "FRA", "DXB", "HND", "SYD", "GRU", "MIA", "SEA"];
 
-// Cada estado de vuelo tiene su color (para el radar y las listas) y
-// su etiqueta de texto. Guardar el color en hexadecimal (además de la
-// variable CSS) nos evita tener que preguntarle al navegador el color
-// cada vez que dibujamos un avión en el canvas, que sería lento.
+// Cada estado de vuelo tiene un color fijo (para el radar y las listas).
+// La etiqueta de texto que se muestra sale de I18N según el idioma activo.
 const STATUS = {
-  CLIMB:   { color: "var(--climb)", hex: "#7fe6ff", label: "CLIMB"   },
-  CRUISE:  { color: "var(--ok)",    hex: "#34ff9c", label: "CRUISE"  },
-  DESCENT: { color: "var(--warn)",  hex: "#ffb020", label: "DESCENT" },
-  HOLD:    { color: "var(--hold)",  hex: "#b98cff", label: "HOLD"    },
+  CLIMB:   { color: "var(--climb)", hex: "#7fe6ff" },
+  CRUISE:  { color: "var(--ok)",    hex: "#34ff9c" },
+  DESCENT: { color: "var(--warn)",  hex: "#ffb020" },
+  HOLD:    { color: "var(--hold)",  hex: "#b98cff" },
 };
 
 const RADIUS_NM = 80;   // "alcance" del radar, en millas náuticas
@@ -60,7 +171,9 @@ function createFlight() {
     dest,
     emergency: false,
     lastSweepHit: -999, // último momento en que el barrido "iluminó" a este avión
-    log: [{ t: nowClock(), text: "Contact acquired, sector entry" }],
+    // el historial de este vuelo guarda "qué pasó" (kind + args), no el texto ya
+    // armado, así podemos traducirlo después si el usuario cambia de idioma
+    log: [{ t: nowClock(), kind: "contactAcquired", args: [] }],
   };
 }
 
@@ -80,11 +193,12 @@ function pickRoute() {
 // ============================================================
 const state = {
   flights: [],
-  selectedId: null, // id del vuelo que el usuario tiene abierto en la ficha de detalle
-  simSpeed: 12,      // multiplicador de velocidad de la simulación (lo controla el slider)
-  filter: "all",     // qué vuelos se muestran: all / route / app
-  feed: [],          // bitácora de eventos, más reciente primero
-  sweepAngle: 0,      // ángulo actual del barrido del radar
+  selectedId: null,   // id del vuelo que el usuario tiene abierto en la ficha de detalle
+  simSpeed: 12,        // multiplicador de velocidad de la simulación (lo controla el slider)
+  filter: "all",       // qué vuelos se muestran: all / route / app
+  feed: [],            // bitácora de eventos (kind + args, no texto), más reciente primero
+  sweepAngle: 0,        // ángulo actual del barrido del radar
+  lang: getSavedLang(), // idioma activo de la interfaz
 };
 
 // Hora actual en formato "HH:MM:SSZ", como se acostumbra en aviación (hora UTC / Zulu)
@@ -92,11 +206,23 @@ function nowClock() {
   return new Date().toISOString().substring(11, 19) + "Z";
 }
 
-// Agrega una línea nueva a la bitácora y refresca esa parte de la pantalla
-function pushFeed(text, sev = "info") {
-  state.feed.unshift({ ts: nowClock(), text, sev });
+// Agrega una línea nueva a la bitácora. Guardamos el "tipo" de evento y
+// sus datos (kind + args), no el texto final: así, si el usuario cambia
+// de idioma después, podemos volver a armar la frase en el otro idioma
+// sin perder el historial.
+function pushFeed(kind, args, sev = "info") {
+  state.feed.unshift({ ts: nowClock(), kind, args, sev });
   if (state.feed.length > 60) state.feed.pop(); // no dejamos crecer la lista para siempre
   renderFeed();
+}
+
+// Arma el texto de un evento en el idioma actual. Si hay un indicativo
+// de vuelo como primer dato, lo resaltamos en negrita (solo para la
+// bitácora general; en la ficha de cada vuelo no hace falta resaltarlo).
+function feedText(entry, bold) {
+  const fn = I18N[state.lang].feed[entry.kind];
+  const args = bold && entry.args.length ? [`<b>${entry.args[0]}</b>`, ...entry.args.slice(1)] : entry.args;
+  return fn(...args);
 }
 
 // arrancamos con 9 vuelos ya en el aire, para que el radar no empiece vacío
@@ -137,7 +263,7 @@ function simulate(now) {
   const dist = (f) => Math.hypot(f.x, f.y);
   for (const f of [...state.flights]) {
     if (dist(f) > RADIUS_NM * 1.05) {
-      pushFeed(`Handoff — <b>${f.callsign}</b> leaving sector coverage`, "info");
+      pushFeed("handoffSector", [f.callsign], "info");
       removeFlight(f.id);
       state.flights.push(createFlight());
     }
@@ -159,7 +285,7 @@ function maybeSpawn(dtReal) {
   if (spawnTimer <= 0 && state.flights.length < MAX_FLIGHTS) {
     const f = createFlight();
     state.flights.push(f);
-    pushFeed(`New contact — <b>${f.callsign}</b> inbound, FL${pad3(Math.round(f.altitude))}`, "info");
+    pushFeed("newContact", [f.callsign, pad3(Math.round(f.altitude))], "info");
     spawnTimer = rnd(5, 11);
   }
   if (state.flights.length < MIN_FLIGHTS) {
@@ -178,36 +304,41 @@ function maybeEvent(dtReal) {
 
   const f = pick(state.flights);
   const roll = Math.random();
-  let text, sev = "info";
+  let kind, args, sev = "info";
 
   if (roll < 0.03) {
     // esto pasa poquísimas veces a propósito, es el "momento dramático" de la demo
     f.emergency = true;
     f.status = "DESCENT";
     f.squawk = "7700"; // 7700 es el código real de emergencia en aviación
-    text = `<b>${f.callsign}</b> squawking 7700 — EMERGENCY DESCENT`;
+    kind = "emergency";
+    args = [f.callsign];
     sev = "emerg";
   } else if (roll < 0.10) {
-    text = `<b>${f.callsign}</b> requesting holding pattern`;
     f.status = "HOLD";
+    kind = "hold";
+    args = [f.callsign];
     sev = "warn";
   } else if (roll < 0.35) {
     f.status = "CLIMB";
-    text = `<b>${f.callsign}</b> cleared to climb, FL${pad3(Math.round(f.altitude) + 40)}`;
+    kind = "climb";
+    args = [f.callsign, pad3(Math.round(f.altitude) + 40)];
   } else if (roll < 0.6) {
     f.status = "CRUISE";
-    text = `<b>${f.callsign}</b> level at FL${pad3(Math.round(f.altitude))}`;
+    kind = "cruise";
+    args = [f.callsign, pad3(Math.round(f.altitude))];
   } else if (roll < 0.85) {
     f.status = "DESCENT";
-    text = `<b>${f.callsign}</b> commencing descent to ${f.dest}`;
+    kind = "descentTo";
+    args = [f.callsign, f.dest];
   } else {
-    text = `Handoff — <b>${f.callsign}</b> to Approach Control`;
+    kind = "handoffApproach";
+    args = [f.callsign];
   }
 
-  // guardamos el mismo texto pero sin las etiquetas <b> en el historial propio del vuelo
-  f.log.unshift({ t: nowClock(), text: text.replace(/<\/?b>/g, "") });
+  f.log.unshift({ t: nowClock(), kind, args });
   if (f.log.length > 12) f.log.pop();
-  pushFeed(text, sev);
+  pushFeed(kind, args, sev);
 
   // si el vuelo al que le acaba de pasar algo es el que el usuario tiene
   // abierto en la ficha, refrescamos la ficha para que se vea al instante
@@ -227,8 +358,9 @@ function removeFlight(id) {
 // ============================================================
 // CANVAS DEL RADAR
 // Usamos dos <canvas> superpuestos:
-//  - bgcv: el fondo (anillos de distancia, cruz, letras N/S/E/W).
-//    Se dibuja una sola vez y solo se vuelve a dibujar si cambia el tamaño.
+//  - bgcv: el fondo (anillos de distancia, cruz, letras N/S/E/O).
+//    Se dibuja una vez y se vuelve a dibujar solo si cambia el tamaño
+//    o el idioma (las letras de los puntos cardinales cambian en español).
 //  - fgcv: lo que se mueve (barrido giratorio y aviones). Se redibuja
 //    entero en cada fotograma, muchas veces por segundo.
 // Separarlos así ahorra trabajo: no hace falta redibujar los anillos
@@ -263,7 +395,8 @@ function resize() {
 new ResizeObserver(resize).observe(stage);
 
 // Dibuja los anillos de distancia, la cruz central y las letras de
-// los puntos cardinales. Es "estático": no se anima.
+// los puntos cardinales. Es "estático": no se anima, pero sí depende
+// del idioma (en español el oeste se escribe "O", no "W").
 function drawBackground() {
   bgx.clearRect(0, 0, W, H);
   bgx.strokeStyle = "rgba(52,255,156,0.16)";
@@ -286,13 +419,14 @@ function drawBackground() {
   bgx.lineTo(CX + RADIUS_NM * SCALE, CY);
   bgx.stroke();
 
+  const compass = I18N[state.lang].compass;
   bgx.fillStyle = "rgba(223,245,232,0.5)";
   bgx.font = "600 11px Rajdhani, sans-serif";
   bgx.textAlign = "center";
-  bgx.fillText("N", CX, CY - RADIUS_NM * SCALE - 10);
-  bgx.fillText("S", CX, CY + RADIUS_NM * SCALE + 18);
-  bgx.fillText("E", CX + RADIUS_NM * SCALE + 14, CY + 4);
-  bgx.fillText("W", CX - RADIUS_NM * SCALE - 14, CY + 4);
+  bgx.fillText(compass.N, CX, CY - RADIUS_NM * SCALE - 10);
+  bgx.fillText(compass.S, CX, CY + RADIUS_NM * SCALE + 18);
+  bgx.fillText(compass.E, CX + RADIUS_NM * SCALE + 14, CY + 4);
+  bgx.fillText(compass.W, CX - RADIUS_NM * SCALE - 14, CY + 4);
   bgx.textAlign = "left";
 }
 
@@ -412,7 +546,7 @@ fgcv.addEventListener("click", (e) => {
 // ============================================================
 // INTERFAZ: KPIs, listas y bitácora
 // Estas funciones no calculan nada nuevo, solo toman lo que ya hay
-// en "state" y lo escriben en el HTML.
+// en "state" y lo escriben en el HTML, en el idioma activo.
 // ============================================================
 function renderKPIs() {
   const n = state.flights.length;
@@ -428,15 +562,16 @@ function renderStatusBars() {
   const counts = { CLIMB: 0, CRUISE: 0, DESCENT: 0, HOLD: 0 };
   for (const f of state.flights) counts[f.status]++;
 
+  const t = I18N[state.lang];
   const wrap = document.getElementById("statusBars");
   wrap.innerHTML = Object.entries(STATUS).map(([key, meta]) => `
     <div class="srow">
       <span class="cd" style="color:${meta.color};background:${meta.color}"></span>
-      <span class="sn">${meta.label}</span>
+      <span class="sn">${t.statusLabels[key]}</span>
       <span class="sv">${counts[key]}</span>
       <span class="bar"><i style="width:${(counts[key] / n) * 100}%;background:${meta.color}"></i></span>
     </div>`).join("");
-  document.getElementById("statusN").textContent = n + " total";
+  document.getElementById("statusN").textContent = `${n} ${t.total}`;
 }
 
 function renderFlightList() {
@@ -460,12 +595,13 @@ function renderFlightList() {
 }
 
 function renderFeed() {
+  const t = I18N[state.lang];
   const wrap = document.getElementById("feedList");
   wrap.innerHTML = state.feed.map((e) => `
     <div class="ev">
       <span class="ts">${e.ts}</span>
-      <span class="tx">${e.text}</span>
-      <span class="sev ${e.sev}">${e.sev}</span>
+      <span class="tx">${feedText(e, true)}</span>
+      <span class="sev ${e.sev}">${t.sevLabels[e.sev]}</span>
     </div>`).join("");
   document.getElementById("feedN").textContent = state.feed.length;
 }
@@ -487,11 +623,12 @@ function renderDossier() {
     return;
   }
 
+  const t = I18N[state.lang];
   dossier.classList.remove("hidden");
   document.getElementById("dsrTitle").textContent = f.callsign;
   document.getElementById("dsrSub").textContent = `${f.orig} → ${f.dest}`;
   document.getElementById("dsrSquawk").textContent = f.squawk;
-  document.getElementById("dsrStatus").textContent = STATUS[f.status].label;
+  document.getElementById("dsrStatus").textContent = t.statusLabels[f.status];
   document.getElementById("dsrType").textContent = f.aircraft;
   document.getElementById("dsrRoute").textContent = `${f.orig} → ${f.dest}`;
   document.getElementById("dsrAlt").textContent = `FL${pad3(Math.round(f.altitude))}`;
@@ -499,7 +636,7 @@ function renderDossier() {
   document.getElementById("dsrHeading").textContent = `${Math.round(f.heading)}°`;
   document.getElementById("dsrRange").textContent = `${Math.round(Math.hypot(f.x, f.y))} NM`;
   document.getElementById("dsrLog").innerHTML = f.log.map((l) => `
-    <div class="dlog"><div class="t">${l.t}</div>${l.text}</div>`).join("");
+    <div class="dlog"><div class="t">${l.t}</div>${feedText(l, false)}</div>`).join("");
 }
 
 document.getElementById("dsrClose").addEventListener("click", () => selectFlight(null));
@@ -523,18 +660,53 @@ function tickClock() {
 }
 setInterval(tickClock, 1000);
 
+// ---------- botón de idioma ----------
+// Cambia el idioma activo y vuelve a pintar todo lo que tiene texto:
+// las etiquetas fijas del HTML (marcadas con data-i18n), el fondo del
+// radar (por las letras N/S/E/O) y los paneles que se arman con
+// JavaScript (KPIs, lista de vuelos, bitácora, ficha de detalle).
+function applyLanguage(lang) {
+  state.lang = lang;
+  document.documentElement.lang = lang;
+  document.title = I18N[lang].title;
+
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    el.textContent = I18N[lang][el.dataset.i18n];
+  });
+  document.querySelectorAll("#langSeg button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.lang === lang);
+  });
+
+  if (W && H) drawBackground(); // redibuja las letras del compás en el idioma nuevo
+  renderKPIs();
+  renderStatusBars();
+  renderFlightList();
+  renderFeed();
+  renderDossier();
+
+  try {
+    localStorage.setItem("atc-radar-lang", lang);
+  } catch (e) {
+    // si el navegador bloquea localStorage no pasa nada grave, solo no se recuerda la próxima vez
+  }
+}
+
+document.getElementById("langSeg").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  applyLanguage(btn.dataset.lang);
+});
+
 // ============================================================
 // ARRANQUE
 // Todo lo de arriba solo define funciones y datos; aquí es donde de
-// verdad "encendemos" la página: primer dibujo, primeros datos en
-// pantalla, y los dos bucles que mantienen todo vivo.
+// verdad "encendemos" la página: primer dibujo, primer idioma
+// aplicado (que ya deja todo pintado en pantalla), y los dos bucles
+// que mantienen todo vivo.
 // ============================================================
 resize();
 tickClock();
-renderKPIs();
-renderStatusBars();
-renderFlightList();
-renderFeed();
+applyLanguage(state.lang);
 
-requestAnimationFrame(drawFrame);            // bucle de dibujo (va a la velocidad de la pantalla)
+requestAnimationFrame(drawFrame);                    // bucle de dibujo (va a la velocidad de la pantalla)
 setInterval(() => simulate(performance.now()), 100); // bucle de simulación (10 veces por segundo)
