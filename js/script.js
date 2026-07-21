@@ -574,24 +574,56 @@ function renderStatusBars() {
   document.getElementById("statusN").textContent = `${n} ${t.total}`;
 }
 
+// Guardamos la fila (el <div>) de cada vuelo aquí para reutilizarla en
+// cada actualización, en vez de destruirla y volverla a crear. Esta
+// lista se repinta 10 veces por segundo (va de la mano con la
+// simulación), y si cada vez tirábamos todo el HTML y lo armábamos de
+// nuevo, el navegador perdía el estado de ":hover" apenas pasabas el
+// cursor (el parpadeo), y el clic a veces "caía" sobre un elemento que
+// ya no existía porque se había reemplazado justo entre que lo
+// presionabas y lo soltabas.
+const flightRowEls = new Map();
+
 function renderFlightList() {
   const wrap = document.getElementById("flightList");
   const sorted = [...state.flights].sort((a, b) => b.altitude - a.altitude);
+  const seenIds = new Set();
 
-  wrap.innerHTML = sorted.map((f) => `
-    <div class="frow ${state.selectedId === f.id ? "sel" : ""}" data-id="${f.id}">
-      <span class="cd" style="color:${STATUS[f.status].color};background:${STATUS[f.status].color}"></span>
-      <span class="cs">${f.callsign}</span>
-      <span class="al">FL${pad3(Math.round(f.altitude))}</span>
-    </div>`).join("");
+  sorted.forEach((f) => {
+    seenIds.add(f.id);
+    let row = flightRowEls.get(f.id);
+
+    if (!row) {
+      // primera vez que aparece este vuelo en la lista: se crea una sola vez
+      row = document.createElement("div");
+      row.className = "frow";
+      row.innerHTML = `<span class="cd"></span><span class="cs"></span><span class="al"></span>`;
+      row.addEventListener("click", () => selectFlight(f.id));
+      flightRowEls.set(f.id, row);
+    }
+
+    // en cada actualización solo cambiamos el contenido, nunca el elemento
+    row.classList.toggle("sel", state.selectedId === f.id);
+    const dot = row.querySelector(".cd");
+    dot.style.color = STATUS[f.status].color;
+    dot.style.background = STATUS[f.status].color;
+    row.querySelector(".cs").textContent = f.callsign;
+    row.querySelector(".al").textContent = `FL${pad3(Math.round(f.altitude))}`;
+
+    // lo movemos a su posición según el orden actual; si ya estaba ahí,
+    // moverlo no lo destruye ni le hace perder el estado de hover
+    wrap.appendChild(row);
+  });
+
+  // los vuelos que ya salieron del radar se quitan de la lista
+  for (const [id, row] of flightRowEls) {
+    if (!seenIds.has(id)) {
+      row.remove();
+      flightRowEls.delete(id);
+    }
+  }
 
   document.getElementById("flightN").textContent = state.flights.length;
-
-  // como reescribimos todo el HTML de la lista arriba, los eventos de
-  // clic anteriores se perdieron; hay que volver a engancharlos
-  wrap.querySelectorAll(".frow").forEach((row) => {
-    row.addEventListener("click", () => selectFlight(Number(row.dataset.id)));
-  });
 }
 
 function renderFeed() {
