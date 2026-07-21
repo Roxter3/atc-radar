@@ -116,6 +116,11 @@ aside::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px}
 .kpi.wc::after{background:var(--warn)}
 .kpi.rc::after{background:var(--crit)}
 .kpi.cc::after{background:var(--climb)}
+/* la tarjeta de "Alertas" resplandora suavemente mientras haya al menos
+   una emergencia o un conflicto de tráfico activo, para llamar la atención
+   sin tener que estar mirando fijo la bitácora */
+@keyframes alertPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,77,94,.45)}50%{box-shadow:0 0 16px 3px rgba(255,77,94,.45)}}
+.kpi.rc.active-alert{animation:alertPulse 1.3s ease-in-out infinite}
 .kpi .lbl{font-family:var(--font-mono);font-size:8.5px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase}
 .kpi .val{font-family:var(--font-mono);font-weight:700;font-size:23px;margin-top:5px;line-height:1;color:var(--ink);font-variant-numeric:tabular-nums}
 .kpi .val.sm{font-size:19px}

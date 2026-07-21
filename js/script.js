@@ -36,6 +36,7 @@ const I18N = {
     recentEvents: "Recent Events",
     dossierFoot: "SIMULATED DATA · DEMO ONLY",
     total: "total",
+    conflictLabel: "CONFLICT",
     compass: { N: "N", S: "S", E: "E", W: "W" },
     statusLabels: { CLIMB: "CLIMB", CRUISE: "CRUISE", DESCENT: "DESCENT", HOLD: "HOLD" },
     sevLabels: { info: "INFO", warn: "WARN", emerg: "EMERG" },
@@ -51,6 +52,8 @@ const I18N = {
       handoffApproach: (cs) => `Handoff — ${cs} to Approach Control`,
       handoffSector: (cs) => `Handoff — ${cs} leaving sector coverage`,
       newContact: (cs, fl) => `New contact — ${cs} inbound, FL${fl}`,
+      trafficConflict: (a, b) => `Traffic conflict — ${a} and ${b} inside separation minima`,
+      conflictResolved: (a, b) => `Conflict resolved — ${a} and ${b} clear of each other`,
     },
   },
   es: {
@@ -83,6 +86,7 @@ const I18N = {
     recentEvents: "Eventos Recientes",
     dossierFoot: "DATOS SIMULADOS · SOLO DEMO",
     total: "total",
+    conflictLabel: "CONFLICTO",
     compass: { N: "N", S: "S", E: "E", W: "O" }, // en español el oeste es "O", no "W"
     statusLabels: { CLIMB: "ASCENSO", CRUISE: "CRUCERO", DESCENT: "DESCENSO", HOLD: "ESPERA" },
     sevLabels: { info: "INFO", warn: "ALERTA", emerg: "EMERG" },
@@ -96,6 +100,8 @@ const I18N = {
       handoffApproach: (cs) => `Transferencia — ${cs} a Control de Aproximación`,
       handoffSector: (cs) => `Transferencia — ${cs} sale de cobertura del sector`,
       newContact: (cs, fl) => `Nuevo contacto — ${cs} entrando, FL${fl}`,
+      trafficConflict: (a, b) => `Conflicto de tráfico — ${a} y ${b} por debajo de la separación mínima`,
+      conflictResolved: (a, b) => `Conflicto resuelto — ${a} y ${b} ya se separaron`,
     },
   },
 };
@@ -134,6 +140,14 @@ const RADIUS_NM = 80;   // "alcance" del radar, en millas náuticas
 const MIN_FLIGHTS = 7;  // nunca queremos que el radar se quede vacío
 const MAX_FLIGHTS = 13; // ni tampoco saturado de aviones
 
+// Separación mínima: si dos aviones quedan más cerca que esto, TANTO en
+// distancia como en altitud al mismo tiempo, es un conflicto de tráfico
+// (así funciona de verdad un sistema de alerta de conflicto en tierra,
+// distinto del aviso que recibe un piloto de su propio avión).
+const CONFLICT_DIST_NM = 5;
+const CONFLICT_ALT_FL = 10; // 10 = 1000 pies, en nuestras unidades de "nivel de vuelo"
+const CONFLICT_COLOR = "#ffb020";
+
 // pequeños ayudantes para no repetir Math.random() por todos lados
 const rnd = (a, b) => Math.random() * (b - a) + a;
 const rndInt = (a, b) => Math.floor(rnd(a, b + 1));
@@ -170,6 +184,7 @@ function createFlight() {
     orig,
     dest,
     emergency: false,
+    conflict: false, // true mientras esté cerca de otro avión en distancia Y altitud (ver checkConflicts)
     lastSweepHit: -999, // último momento en que el barrido "iluminó" a este avión
     // el historial de este vuelo guarda "qué pasó" (kind + args), no el texto ya
     // armado, así podemos traducirlo después si el usuario cambia de idioma
@@ -216,12 +231,20 @@ function pushFeed(kind, args, sev = "info") {
   renderFeed();
 }
 
-// Arma el texto de un evento en el idioma actual. Si hay un indicativo
-// de vuelo como primer dato, lo resaltamos en negrita (solo para la
-// bitácora general; en la ficha de cada vuelo no hace falta resaltarlo).
+// Eventos donde el primer Y el segundo dato son indicativos de vuelo
+// (un conflicto de tráfico involucra a dos aviones, no a uno solo).
+const FEED_KINDS_DOS_VUELOS = new Set(["trafficConflict", "conflictResolved"]);
+
+// Arma el texto de un evento en el idioma actual. Si hay uno o dos
+// indicativos de vuelo entre los datos, los resaltamos en negrita
+// (solo para la bitácora general; en la ficha de cada vuelo no hace
+// falta resaltarlo, ahí ya se sabe de qué vuelo se trata).
 function feedText(entry, bold) {
   const fn = I18N[state.lang].feed[entry.kind];
-  const args = bold && entry.args.length ? [`<b>${entry.args[0]}</b>`, ...entry.args.slice(1)] : entry.args;
+  if (!bold || entry.args.length === 0) return fn(...entry.args);
+
+  const cantidadANegritas = FEED_KINDS_DOS_VUELOS.has(entry.kind) ? 2 : 1;
+  const args = entry.args.map((valor, i) => (i < cantidadANegritas ? `<b>${valor}</b>` : valor));
   return fn(...args);
 }
 
@@ -258,6 +281,8 @@ function simulate(now) {
     if (f.status === "DESCENT") f.altitude = Math.max(20, f.altitude - dt * 0.6);
   }
 
+  checkConflicts();
+
   // si un avión se sale del alcance del radar, lo damos de baja (como si
   // hiciera "handoff" al siguiente sector) y ponemos uno nuevo en su lugar
   const dist = (f) => Math.hypot(f.x, f.y);
@@ -274,6 +299,66 @@ function simulate(now) {
   renderKPIs();
   renderStatusBars();
   renderFlightList();
+}
+
+// clave única para un par de vuelos, sin importar en qué orden se pasen los ids
+function conflictKey(idA, idB) {
+  return idA < idB ? `${idA}-${idB}` : `${idB}-${idA}`;
+}
+
+// Pares de vuelos actualmente en conflicto: clave -> { a: callsign, b: callsign }.
+// Guardamos los indicativos (y no solo "true") para poder anunciar el
+// conflicto resuelto más adelante, aunque ya no tengamos a mano el objeto
+// del vuelo en ese momento.
+const activeConflicts = new Map();
+
+// Revisa cada par de vuelos y decide quién entra o sale de conflicto.
+// Se guarda el estado en "f.conflict" de cada avión (para dibujarlo
+// resaltado en el radar) y en el mapa "activeConflicts" (para no avisar
+// el mismo conflicto una y otra vez mientras los aviones siguen cerca).
+function checkConflicts() {
+  const seenNow = new Set();
+
+  for (let i = 0; i < state.flights.length; i++) {
+    for (let j = i + 1; j < state.flights.length; j++) {
+      const a = state.flights[i], b = state.flights[j];
+      const distNm = Math.hypot(a.x - b.x, a.y - b.y);
+      const altDiffFl = Math.abs(a.altitude - b.altitude);
+      if (distNm >= CONFLICT_DIST_NM || altDiffFl >= CONFLICT_ALT_FL) continue;
+
+      const key = conflictKey(a.id, b.id);
+      seenNow.add(key);
+      if (!activeConflicts.has(key)) {
+        activeConflicts.set(key, { a: a.callsign, b: b.callsign });
+        pushFeed("trafficConflict", [a.callsign, b.callsign], "warn");
+        a.log.unshift({ t: nowClock(), kind: "trafficConflict", args: [a.callsign, b.callsign] });
+        b.log.unshift({ t: nowClock(), kind: "trafficConflict", args: [a.callsign, b.callsign] });
+        if (state.selectedId === a.id || state.selectedId === b.id) renderDossier();
+      }
+    }
+  }
+
+  // los que ya no siguen cerca dejan de estar en conflicto; si ambos
+  // aviones todavía están en el radar (no fue que uno se retiró del
+  // sector), avisamos que el conflicto quedó resuelto
+  const currentIds = new Set(state.flights.map((f) => f.id));
+  for (const [key, info] of activeConflicts) {
+    if (seenNow.has(key)) continue;
+    activeConflicts.delete(key);
+    const [idA, idB] = key.split("-").map(Number);
+    if (currentIds.has(idA) && currentIds.has(idB)) {
+      pushFeed("conflictResolved", [info.a, info.b], "info");
+    }
+  }
+
+  // recalculamos qué aviones siguen en algún conflicto activo en este instante
+  const flaggedIds = new Set();
+  for (const key of activeConflicts.keys()) {
+    const [idA, idB] = key.split("-").map(Number);
+    flaggedIds.add(idA);
+    flaggedIds.add(idB);
+  }
+  for (const f of state.flights) f.conflict = flaggedIds.has(f.id);
 }
 
 // De vez en cuando aparece un vuelo nuevo entrando al sector, y si por
@@ -493,6 +578,16 @@ function drawFrame() {
       fgx.fillStyle = f.emergency ? "rgba(255,77,94,0.25)" : "rgba(52,255,156,0.22)";
       fgx.fill();
     }
+    // anillo punteado ámbar: este avión está en conflicto de tráfico con otro
+    if (f.conflict) {
+      fgx.beginPath();
+      fgx.arc(px, py, 15, 0, Math.PI * 2);
+      fgx.setLineDash([3, 3]);
+      fgx.strokeStyle = CONFLICT_COLOR;
+      fgx.lineWidth = 1.6;
+      fgx.stroke();
+      fgx.setLineDash([]);
+    }
 
     // el avión en sí: un triangulito rotado según su rumbo
     fgx.save();
@@ -517,6 +612,33 @@ function drawFrame() {
     fgx.fillText(f.callsign, px + 9, py - 6);
     fgx.fillStyle = "rgba(130,172,151,0.8)";
     fgx.fillText(`FL${pad3(Math.round(f.altitude))}`, px + 9, py + 6);
+  }
+
+  // línea punteada entre cada par de aviones en conflicto, con una
+  // etiqueta en el punto medio, para que se note claramente que el
+  // conflicto es ENTRE esos dos y no un problema de cada uno por separado
+  for (const key of activeConflicts.keys()) {
+    const [idA, idB] = key.split("-").map(Number);
+    const a = state.flights.find((fl) => fl.id === idA);
+    const b = state.flights.find((fl) => fl.id === idB);
+    if (!a || !b || !isVisible(a) || !isVisible(b)) continue;
+
+    const paX = CX + a.x * SCALE, paY = CY + a.y * SCALE;
+    const pbX = CX + b.x * SCALE, pbY = CY + b.y * SCALE;
+    fgx.setLineDash([3, 3]);
+    fgx.strokeStyle = CONFLICT_COLOR;
+    fgx.lineWidth = 1;
+    fgx.beginPath();
+    fgx.moveTo(paX, paY);
+    fgx.lineTo(pbX, pbY);
+    fgx.stroke();
+    fgx.setLineDash([]);
+
+    fgx.fillStyle = CONFLICT_COLOR;
+    fgx.font = "bold 9px JetBrains Mono, monospace";
+    fgx.textAlign = "center";
+    fgx.fillText(I18N[state.lang].conflictLabel, (paX + pbX) / 2, (paY + pbY) / 2 - 5);
+    fgx.textAlign = "left";
   }
 
   requestAnimationFrame(drawFrame); // y así, siguiente fotograma
@@ -554,7 +676,15 @@ function renderKPIs() {
   const avgAlt = n ? Math.round(state.flights.reduce((s, f) => s + f.altitude, 0) / n) : 0;
   document.getElementById("kpiAlt").textContent = `FL${pad3(avgAlt)}`;
   document.getElementById("kpiDescent").textContent = state.flights.filter((f) => f.status === "DESCENT").length;
-  document.getElementById("kpiAlerts").textContent = state.flights.filter((f) => f.emergency).length;
+
+  // "Alertas" cuenta tanto emergencias como aviones en conflicto de tráfico
+  // (un avión puede estar en las dos listas a la vez, por eso usamos un Set)
+  const alertIds = new Set();
+  for (const f of state.flights) {
+    if (f.emergency || f.conflict) alertIds.add(f.id);
+  }
+  document.getElementById("kpiAlerts").textContent = alertIds.size;
+  document.querySelector(".kpi.rc").classList.toggle("active-alert", alertIds.size > 0);
 }
 
 function renderStatusBars() {
