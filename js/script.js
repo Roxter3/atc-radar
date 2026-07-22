@@ -200,6 +200,7 @@ function createFlight() {
     dest,
     emergency: false,
     conflict: false, // true mientras esté cerca de otro avión en distancia Y altitud (ver checkConflicts)
+    finalApproach: false, // true una vez que entró a menos de FINAL_APPROACH_NM: a partir de ahí, ya no se le vuelve a tocar el rumbo (ver por qué en simulate())
     lastSweepHit: -999, // último momento en que el barrido "iluminó" a este avión
     // el historial de este vuelo guarda "qué pasó" (kind + args), no el texto ya
     // armado, así podemos traducirlo después si el usuario cambia de idioma
@@ -310,19 +311,27 @@ function simulate(now) {
     if (f.status === "DESCENT") {
       // En descenso, el vuelo deja de volar "a su aire" y se deja
       // vectorear de a poco hacia la pista de la torre, como pasa de
-      // verdad. Pero OJO: solo mientras esté a más de FINAL_APPROACH_NM
-      // de la pista. Muy cerca del centro, el rumbo "hacia la pista"
-      // cambia bruscamente con el más mínimo movimiento (es la misma
-      // razón por la que, caminando cerca de un poste de luz, tenés que
-      // girar la cabeza rapidísimo para seguir mirándolo cuando pasás
-      // al lado). Si seguimos corrigiendo el rumbo ahí, el avión termina
-      // persiguiendo un blanco que se mueve más rápido de lo que puede
-      // girar, y queda dando vueltas en el centro en vez de aterrizar.
-      // La solución real (y la que usan de verdad los sistemas de
-      // navegación): una vez alineado, dejar de recalcular y volar
-      // derecho ese último tramo ("final approach").
-      const distToRunway = Math.hypot(f.x, f.y);
-      if (distToRunway > FINAL_APPROACH_NM) {
+      // verdad. Pero OJO: solo hasta que entra en "tramo final" (a menos
+      // de FINAL_APPROACH_NM de la pista). Muy cerca del centro, el
+      // rumbo "hacia la pista" cambia bruscamente con el más mínimo
+      // movimiento (es la misma razón por la que, caminando cerca de un
+      // poste de luz, tenés que girar la cabeza rapidísimo para seguir
+      // mirándolo cuando pasás al lado). Si seguimos corrigiendo el
+      // rumbo ahí, el avión persigue un blanco que gira más rápido de lo
+      // que puede virar.
+      //
+      // "finalApproach" queda pegado en true para siempre una vez que
+      // entra: si no fuéramos así y el avión no llega a aterrizar en esa
+      // pasada (todavía va muy alto) y termina saliendo de nuevo más
+      // allá de FINAL_APPROACH_NM, sin este freno el rumbo se
+      // recalcularía de nuevo, apuntando ahora PARA ATRÁS, y el avión
+      // pegaría un giro de 180° para volver al centro, entrando y
+      // saliendo en bucle. Una vez que se alineó, vuela derecho ese
+      // tramo pase lo que pase, como en la vida real (si no llega a
+      // aterrizar, es un "missed approach", no da media vuelta al toque).
+      if (!f.finalApproach && Math.hypot(f.x, f.y) <= FINAL_APPROACH_NM) f.finalApproach = true;
+
+      if (!f.finalApproach) {
         const bearingToRunway = (angleTo(f) + 180) % 360;
         const diff = ((bearingToRunway - f.heading + 540) % 360) - 180; // entre -180 y 180
         const turn = Math.max(-DESCENT_TURN_RATE * dt, Math.min(DESCENT_TURN_RATE * dt, diff));
@@ -470,6 +479,7 @@ function maybeEvent(dtReal) {
     // esto pasa poquísimas veces a propósito, es el "momento dramático" de la demo
     f.emergency = true;
     f.status = "DESCENT";
+    f.finalApproach = false; // arranca un descenso nuevo: que se deje vectorear desde cero
     f.squawk = "7700"; // 7700 es el código real de emergencia en aviación
     kind = "emergency";
     args = [f.callsign];
@@ -489,6 +499,7 @@ function maybeEvent(dtReal) {
     args = [f.callsign, pad3(Math.round(f.altitude))];
   } else if (roll < 0.85) {
     f.status = "DESCENT";
+    f.finalApproach = false; // arranca un descenso nuevo: que se deje vectorear desde cero
     kind = "descentTo";
     args = [f.callsign, f.dest];
   } else {
