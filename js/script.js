@@ -159,6 +159,7 @@ const CONFLICT_COLOR = "#ffb020";
 const RUNWAY_LEN_NM = 2;
 const RUNWAY_LABEL = "RWY 09/27";
 const DESCENT_TURN_RATE = 12; // qué tan rápido gira hacia la pista, en grados por unidad de dt
+const FINAL_APPROACH_NM = 8; // debajo de esta distancia, deja de corregir el rumbo y vuela derecho
 const LANDING_RADIUS_NM = 3;
 const LANDING_ALT_FL = 30;
 
@@ -307,12 +308,26 @@ function simulate(now) {
     f.y -= Math.cos(f.heading * Math.PI / 180) * nmPerSec * dt;
 
     if (f.status === "DESCENT") {
-      // en descenso, el vuelo deja de volar "a su aire" y se deja
-      // vectorear de a poco hacia la pista de la torre, como pasa de verdad
-      const bearingToRunway = (angleTo(f) + 180) % 360;
-      const diff = ((bearingToRunway - f.heading + 540) % 360) - 180; // entre -180 y 180
-      const turn = Math.max(-DESCENT_TURN_RATE * dt, Math.min(DESCENT_TURN_RATE * dt, diff));
-      f.heading = (f.heading + turn + 360) % 360;
+      // En descenso, el vuelo deja de volar "a su aire" y se deja
+      // vectorear de a poco hacia la pista de la torre, como pasa de
+      // verdad. Pero OJO: solo mientras esté a más de FINAL_APPROACH_NM
+      // de la pista. Muy cerca del centro, el rumbo "hacia la pista"
+      // cambia bruscamente con el más mínimo movimiento (es la misma
+      // razón por la que, caminando cerca de un poste de luz, tenés que
+      // girar la cabeza rapidísimo para seguir mirándolo cuando pasás
+      // al lado). Si seguimos corrigiendo el rumbo ahí, el avión termina
+      // persiguiendo un blanco que se mueve más rápido de lo que puede
+      // girar, y queda dando vueltas en el centro en vez de aterrizar.
+      // La solución real (y la que usan de verdad los sistemas de
+      // navegación): una vez alineado, dejar de recalcular y volar
+      // derecho ese último tramo ("final approach").
+      const distToRunway = Math.hypot(f.x, f.y);
+      if (distToRunway > FINAL_APPROACH_NM) {
+        const bearingToRunway = (angleTo(f) + 180) % 360;
+        const diff = ((bearingToRunway - f.heading + 540) % 360) - 180; // entre -180 y 180
+        const turn = Math.max(-DESCENT_TURN_RATE * dt, Math.min(DESCENT_TURN_RATE * dt, diff));
+        f.heading = (f.heading + turn + 360) % 360;
+      }
       f.altitude = Math.max(20, f.altitude - dt * 0.6);
     } else {
       // un rumbo que se bambolea un poquito, para que no vuelen en línea perfectamente recta
@@ -437,7 +452,17 @@ function maybeEvent(dtReal) {
   if (eventTimer > 0 || state.flights.length === 0) return;
   eventTimer = rnd(3, 7);
 
-  const f = pick(state.flights);
+  // Un vuelo que ya está en tramo final (en descenso, y muy cerca de la
+  // pista) no puede ser elegido para un evento al azar: si justo ahí le
+  // cambiáramos el estado a "ascenso" o "espera", abandonaría el rumbo
+  // que traía de la nada, dando la sensación de que "da vueltas" cerca
+  // del centro. Se lo deja terminar de aterrizar en paz.
+  const candidatos = state.flights.filter(
+    (fl) => !(fl.status === "DESCENT" && Math.hypot(fl.x, fl.y) < FINAL_APPROACH_NM)
+  );
+  if (candidatos.length === 0) return;
+
+  const f = pick(candidatos);
   const roll = Math.random();
   let kind, args, sev = "info";
 
