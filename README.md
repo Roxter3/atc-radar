@@ -24,7 +24,7 @@ npx serve .
 - Límite de sector visible en el radar: el borde de los 80NM de alcance se dibuja como un límite real, con los sectores vecinos (SKW-2, SKW-6, SKW-8, SKW-9) marcados en las diagonales, para que las transferencias que ya se ven en la bitácora tengan también un lugar concreto en el mapa.
 - Frecuencia activa: debajo del radar se muestra qué controlador tendría estos vuelos en la realidad ("CTR 124.35" en ruta, "APP 118.70" en aproximación), y cambia sola según el filtro elegido.
 - Reporte de clima estilo METAR (viento, visibilidad, presión), que varía lentamente con el tiempo para sentirse en vivo.
-- Pista propia en el centro del radar: los vuelos en descenso ahora se vectorean de verdad hacia ahí (dejan de volar con rumbo libre y van girando hacia la pista), y al llegar lo bastante cerca y bajo, aterrizan (se anuncia en la bitácora y se reemplazan por un contacto nuevo).
+- Pista propia en el centro del radar, con vuelos que siguen una ruta con sentido de principio a fin: cada avión nace como llegada (crucero, luego desciende y aterriza), salida (recién despegado, sube, se nivela y sale del sector) o de paso (crucero todo el trayecto), y ya no cambia de idea al azar a mitad de camino. Al terminar su ruta, aterriza o sale del sector, no desaparece de la nada.
 
 ## Stack
 

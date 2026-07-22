@@ -162,6 +162,10 @@ const DESCENT_TURN_RATE = 12; // qué tan rápido gira hacia la pista, en grados
 const FINAL_APPROACH_NM = 8; // debajo de esta distancia, deja de corregir el rumbo y vuela derecho
 const LANDING_RADIUS_NM = 3;
 const LANDING_ALT_FL = 30;
+const ARRIVAL_DESCENT_NM = 35; // a esta distancia, un vuelo "arrival" empieza a bajar por su cuenta
+const CLIMB_RATE = 0.6;  // qué tan rápido gana altitud un "departure", en FL por unidad de dt
+const DESCENT_RATE = 1.4; // qué tan rápido la pierde un "arrival": más rápido que el ascenso, para
+                           // que le alcance la distancia entre ARRIVAL_DESCENT_NM y la pista
 
 // pequeños ayudantes para no repetir Math.random() por todos lados
 const rnd = (a, b) => Math.random() * (b - a) + a;
@@ -170,28 +174,62 @@ const pick = (arr) => arr[rndInt(0, arr.length - 1)];
 
 // ============================================================
 // CREACIÓN DE VUELOS
+// Cada vuelo tiene un "papel" (role) que le da una ruta con sentido de
+// principio a fin, en vez de aparecer con un rumbo cualquiera y después
+// ir cambiando de idea al azar:
+//  - arrival:   entra crucero, más adelante empieza a descender por su
+//               cuenta al acercarse, y termina aterrizando en la pista.
+//  - departure: "acaba de despegar" cerca de la pista, sube, se nivela
+//               en crucero, y sigue de largo hasta salir del sector.
+//  - transit:   solo está de paso, en crucero todo el tiempo, hasta que
+//               sale del sector.
+// Así, el estado de cada avión solo cambia una vez en cada sentido
+// (crucero -> descenso, o ascenso -> crucero), nunca al revés y nunca
+// sin motivo.
 // ============================================================
 let nextId = 1;
+const ROLES = ["arrival", "arrival", "departure", "transit", "transit"]; // repetido = más probable
 
-// Inventa un vuelo nuevo: le da un indicativo, un avión, una posición
-// al azar dentro del radar, y una ruta de origen/destino.
-function createFlight() {
+// Inventa un vuelo nuevo: le da un indicativo, un avión, una posición y
+// un rumbo que ya tienen sentido para el papel que le tocó.
+function createFlight(role) {
+  role = role || pick(ROLES);
   const airline = pick(AIRLINES);
-  const status = pick(Object.keys(STATUS));
-  const angle = rnd(0, 360);
-  const dist = rnd(15, RADIUS_NM * 0.95); // que no aparezca justo en el borde ni en el centro
   const [orig, dest] = pickRoute();
+  const angle = rnd(0, 360); // dirección desde el centro hacia donde aparece
+
+  let dist, status, altitude, heading;
+  if (role === "arrival") {
+    // aparece lejos, ya crucero, apuntando en general hacia la pista
+    // (con algo de margen: no viene "perfecto" desde el principio)
+    dist = rnd(45, RADIUS_NM * 0.95);
+    status = "CRUISE";
+    altitude = rndInt(200, 400);
+    heading = ((angle + 180) + rnd(-25, 25) + 360) % 360; // bearing hacia el centro
+  } else if (role === "departure") {
+    // "recién despegó": aparece cerca de la pista, subiendo, alejándose
+    dist = rnd(2, 6);
+    status = "CLIMB";
+    altitude = rndInt(10, 40);
+    heading = (angle + rnd(-25, 25) + 360) % 360; // bearing alejándose del centro
+  } else {
+    // transit: solo está de paso, en cualquier dirección
+    dist = rnd(15, RADIUS_NM * 0.95);
+    status = "CRUISE";
+    altitude = rndInt(180, 410);
+    heading = rnd(0, 360);
+  }
 
   return {
     id: nextId++,
+    role,
     callsign: airline + rndInt(100, 999),
     aircraft: pick(AIRCRAFT),
     squawk: `${rndInt(0, 7)}${rndInt(0, 7)}${rndInt(0, 7)}${rndInt(0, 7)}`, // código de transpondedor, siempre dígitos 0-7
     status,
-    // según el estado, arrancamos en una altitud que tenga sentido
-    altitude: status === "CLIMB" ? rndInt(80, 280) : status === "DESCENT" ? rndInt(60, 250) : rndInt(180, 410),
+    altitude,
     speed: rndInt(220, 520), // nudos
-    heading: rnd(0, 360),    // rumbo, en grados, 0 = norte
+    heading,
     // convertimos ángulo + distancia (coordenadas polares) a x,y para
     // poder mover el avión más fácil después con solo sumar/restar
     x: Math.sin(angle * Math.PI / 180) * dist,
@@ -274,6 +312,16 @@ function feedText(entry, bold) {
   return fn(...args);
 }
 
+// Agrega una línea al historial propio del vuelo Y a la bitácora general
+// a la vez (son casi siempre el mismo evento), y si el vuelo es el que
+// el usuario tiene abierto en la ficha, la refresca al instante.
+function logEvent(f, kind, args, sev = "info") {
+  f.log.unshift({ t: nowClock(), kind, args });
+  if (f.log.length > 12) f.log.pop();
+  pushFeed(kind, args, sev);
+  if (state.selectedId === f.id) renderDossier();
+}
+
 // arrancamos con 9 vuelos ya en el aire, para que el radar no empiece vacío
 for (let i = 0; i < 9; i++) state.flights.push(createFlight());
 
@@ -329,7 +377,10 @@ function simulate(now) {
       // saliendo en bucle. Una vez que se alineó, vuela derecho ese
       // tramo pase lo que pase, como en la vida real (si no llega a
       // aterrizar, es un "missed approach", no da media vuelta al toque).
-      if (!f.finalApproach && Math.hypot(f.x, f.y) <= FINAL_APPROACH_NM) f.finalApproach = true;
+      if (!f.finalApproach && Math.hypot(f.x, f.y) <= FINAL_APPROACH_NM) {
+        f.finalApproach = true;
+        logEvent(f, "handoffApproach", [f.callsign], "info");
+      }
 
       if (!f.finalApproach) {
         const bearingToRunway = (angleTo(f) + 180) % 360;
@@ -337,11 +388,34 @@ function simulate(now) {
         const turn = Math.max(-DESCENT_TURN_RATE * dt, Math.min(DESCENT_TURN_RATE * dt, diff));
         f.heading = (f.heading + turn + 360) % 360;
       }
-      f.altitude = Math.max(20, f.altitude - dt * 0.6);
-    } else {
+      // el descenso baja más rápido que lo que sube un ascenso (DESCENT_RATE
+      // > la tasa de CLIMB, más abajo): entre donde empieza a bajar un
+      // "arrival" (ARRIVAL_DESCENT_NM) y la pista solo hay unas 32 millas,
+      // y como ahora los vuelos entran en crucero bastante alto (hasta
+      // FL400), con la tasa vieja muchos no llegaban a bajar lo suficiente
+      // a tiempo y terminaban en un "missed approach" en vez de aterrizar.
+      f.altitude = Math.max(20, f.altitude - dt * DESCENT_RATE);
+    } else if (f.status === "CLIMB") {
       // un rumbo que se bambolea un poquito, para que no vuelen en línea perfectamente recta
       f.heading = (f.heading + rnd(-dt * 0.6, dt * 0.6) + 360) % 360;
-      if (f.status === "CLIMB") f.altitude = Math.min(410, f.altitude + dt * 0.6);
+      f.altitude = Math.min(410, f.altitude + dt * CLIMB_RATE);
+      // un "departure" que ya alcanzó una altitud de crucero se nivela,
+      // una sola vez, y no vuelve a subir en lo que le queda de vuelo
+      if (f.role === "departure" && f.altitude >= 200) {
+        f.status = "CRUISE";
+        logEvent(f, "cruise", [f.callsign, pad3(Math.round(f.altitude))], "info");
+      }
+    } else {
+      // CRUISE (o cualquier otro caso): vuela con un bamboleo suave
+      f.heading = (f.heading + rnd(-dt * 0.6, dt * 0.6) + 360) % 360;
+      // un "arrival" que ya se acercó lo suficiente empieza a bajar por
+      // su cuenta, una sola vez; los "transit" y "departure" en crucero
+      // simplemente siguen de largo hasta salir del sector
+      if (f.role === "arrival" && Math.hypot(f.x, f.y) < ARRIVAL_DESCENT_NM) {
+        f.status = "DESCENT";
+        f.finalApproach = false;
+        logEvent(f, "descentTo", [f.callsign, f.dest], "info");
+      }
     }
   }
 
@@ -369,7 +443,7 @@ function simulate(now) {
   }
 
   maybeSpawn(dtReal);
-  maybeEvent(dtReal);
+  maybeEmergency(dtReal);
   renderKPIs();
   renderStatusBars();
   renderFlightList();
@@ -452,68 +526,28 @@ function maybeSpawn(dtReal) {
   }
 }
 
-// Cada tanto le pasa "algo" a un vuelo al azar: sube, baja, pide espera,
-// o rarísima vez declara una emergencia. Esto es lo que va llenando la
-// bitácora de abajo y le da vida a la simulación.
-let eventTimer = rnd(3, 6);
-function maybeEvent(dtReal) {
-  eventTimer -= dtReal * state.simSpeed / 8;
-  if (eventTimer > 0 || state.flights.length === 0) return;
-  eventTimer = rnd(3, 7);
+// Muy de vez en cuando, un vuelo declara una emergencia: es el "momento
+// dramático" de la demo. El resto de los cambios de estado (subir,
+// bajar, nivelarse) ya no son al azar: son parte de la ruta con sentido
+// que le tocó a cada vuelo desde que apareció (ver createFlight y el
+// bucle de movimiento en simulate).
+let emergencyTimer = rnd(60, 100);
+function maybeEmergency(dtReal) {
+  emergencyTimer -= dtReal * state.simSpeed / 8;
+  if (emergencyTimer > 0 || state.flights.length === 0) return;
+  emergencyTimer = rnd(90, 160);
 
-  // Un vuelo que ya está en tramo final (en descenso, y muy cerca de la
-  // pista) no puede ser elegido para un evento al azar: si justo ahí le
-  // cambiáramos el estado a "ascenso" o "espera", abandonaría el rumbo
-  // que traía de la nada, dando la sensación de que "da vueltas" cerca
-  // del centro. Se lo deja terminar de aterrizar en paz.
-  const candidatos = state.flights.filter(
-    (fl) => !(fl.status === "DESCENT" && Math.hypot(fl.x, fl.y) < FINAL_APPROACH_NM)
-  );
+  // no le puede tocar a un vuelo que ya está en tramo final: se lo deja
+  // terminar de aterrizar en paz, en vez de mandarlo a descender "de nuevo"
+  const candidatos = state.flights.filter((fl) => !(fl.status === "DESCENT" && fl.finalApproach));
   if (candidatos.length === 0) return;
 
   const f = pick(candidatos);
-  const roll = Math.random();
-  let kind, args, sev = "info";
-
-  if (roll < 0.03) {
-    // esto pasa poquísimas veces a propósito, es el "momento dramático" de la demo
-    f.emergency = true;
-    f.status = "DESCENT";
-    f.finalApproach = false; // arranca un descenso nuevo: que se deje vectorear desde cero
-    f.squawk = "7700"; // 7700 es el código real de emergencia en aviación
-    kind = "emergency";
-    args = [f.callsign];
-    sev = "emerg";
-  } else if (roll < 0.10) {
-    f.status = "HOLD";
-    kind = "hold";
-    args = [f.callsign];
-    sev = "warn";
-  } else if (roll < 0.35) {
-    f.status = "CLIMB";
-    kind = "climb";
-    args = [f.callsign, pad3(Math.round(f.altitude) + 40)];
-  } else if (roll < 0.6) {
-    f.status = "CRUISE";
-    kind = "cruise";
-    args = [f.callsign, pad3(Math.round(f.altitude))];
-  } else if (roll < 0.85) {
-    f.status = "DESCENT";
-    f.finalApproach = false; // arranca un descenso nuevo: que se deje vectorear desde cero
-    kind = "descentTo";
-    args = [f.callsign, f.dest];
-  } else {
-    kind = "handoffApproach";
-    args = [f.callsign];
-  }
-
-  f.log.unshift({ t: nowClock(), kind, args });
-  if (f.log.length > 12) f.log.pop();
-  pushFeed(kind, args, sev);
-
-  // si el vuelo al que le acaba de pasar algo es el que el usuario tiene
-  // abierto en la ficha, refrescamos la ficha para que se vea al instante
-  if (state.selectedId === f.id) renderDossier();
+  f.emergency = true;
+  f.status = "DESCENT";
+  f.finalApproach = false; // arranca un descenso de emergencia, vectoreado desde cero
+  f.squawk = "7700"; // 7700 es el código real de emergencia en aviación
+  logEvent(f, "emergency", [f.callsign], "emerg");
 }
 
 // pad3(7) -> "007", para mostrar los niveles de vuelo como "FL070"
